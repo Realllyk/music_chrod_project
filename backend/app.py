@@ -12,12 +12,16 @@ import logging
 import json
 from datetime import datetime
 
+# 注册采集模块
+register_capture(app)
+
 # 添加 backend 目录到 Python 路径
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 from sources import SourceFactory
 from transcriber import MelodyTranscriber, PolyphonicTranscriber
+from services.capture import register_blueprint as register_capture
 
 # ============================================================================
 # 初始化
