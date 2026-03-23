@@ -7,3 +7,4 @@ instance/
 .env
 .pytest_cache/
 .mypy_cache/
+backend/outputs/
