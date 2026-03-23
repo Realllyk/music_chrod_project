@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音乐扒谱 - WASAPI 录音采集</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .card h2 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #4ecdc4;
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #666;
+        }
+        
+        .status-dot.active {
+            background: #4ecdc4;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .status-dot.recording {
+            background: #ff6b6b;
+            animation: pulse 0.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .btn-primary {
+            background: #4ecdc4;
+            color: #1a1a2e;
+        }
+        
+        .btn-primary:hover {
+            background: #45b7aa;
+        }
+        
+        .btn-danger {
+            background: #ff6b6b;
+            color: #fff;
+        }
+        
+        .btn-danger:hover {
+            background: #ee5a5a;
+        }
+        
+        .btn-secondary {
+            background: #95a5a6;
+            color: #fff;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .session-info {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 12px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 14px;
+            word-break: break-all;
+        }
+        
+        .recordings-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .recording-item {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .recording-item .info {
+            flex: 1;
+        }
+        
+        .recording-item .name {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+        
+        .recording-item .meta {
+            font-size: 12px;
+            color: #aaa;
+        }
+        
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        
+        .log {
+            background: #000;
+            color: #0f0;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .log-entry {
+            margin-bottom: 4px;
+        }
+        
+        .log-entry.error {
+            color: #ff6b6b;
+        }
+        
+        .log-entry.success {
+            color: #4ecdc4;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 音乐扒谱 - WASAPI 录音采集</h1>
+        
+        <!-- 采集控制 -->
+        <div class="card">
+            <h2>📍 采集控制</h2>
+            <div class="status">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">等待操作</span>
+            </div>
+            <div>
+                <button class="btn btn-primary" id="btnStartSession" onclick="startSession()">
+                    开始采集会话
+                </button>
+                <button class="btn btn-danger" id="btnStartRecording" onclick="requestRecording()" disabled>
+                    请求开始录制
+                </button>
+                <button class="btn btn-secondary" onclick="stopSession()">
+                    停止会话
+                </button>
+            </div>
+            <div class="session-info hidden" id="sessionInfo">
+                <strong>当前会话ID:</strong> <span id="currentSessionId">-</span>
+            </div>
+        </div>
+        
+        <!-- Agent 状态 -->
+        <div class="card">
+            <h2>🤖 Agent 状态</h2>
+            <div>
+                <button class="btn btn-secondary" onclick="checkActiveSession()">
+                    刷新状态
+                </button>
+            </div>
+            <div class="session-info" id="agentStatus" style="margin-top: 12px;">
+                点击"刷新状态"查看 Agent 连接状态
+            </div>
+        </div>
+        
+        <!-- 录音列表 -->
+        <div class="card">
+            <h2>📁 录音记录</h2>
+            <div>
+                <button class="btn btn-secondary" onclick="loadRecordings()">
+                    刷新列表
+                </button>
+            </div>
+            <div class="recordings-list" id="recordingsList" style="margin-top: 12px;">
+                点击"刷新列表"加载录音记录
+            </div>
+        </div>
+        
+        <!-- 识别控制 -->
+        <div class="card">
+            <h2>🎼 扒谱识别</h2>
+            <div>
+            <div style="margin-bottom: 12px;">
+                <input type="file" id="wavFile" accept=".wav" style="margin-right: 10px;">
+                <button class="btn btn-primary" onclick="uploadWavFile()">上传 WAV</button>
+            </div>
+                <button class="btn btn-primary" onclick="transcribeMelody()">
+                    提取单旋律 (Melody)
+                </button>
+                <button class="btn btn-primary" onclick="transcribePolyphonic()">
+                    多声部分离 (Polyphonic)
+                </button>
+            </div>
+        </div>
+        
+        <!-- 日志 -->
+        <div class="card">
+            <h2>📝 日志</h2>
+            <div class="log" id="log">
+                <div class="log-entry">页面已加载</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 配置
+        const API_BASE = window.location.origin;
+        let currentSessionId = null;
+        
+        // 日志
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.insertBefore(entry, logDiv.firstChild);
+        }
+        
+        // API 调用
+        async function apiCall(endpoint, options = {}) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    ...options,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                return await response.json();
+            } catch (error) {
+                log(`API 调用失败: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+        
+        // 开始采集会话
+        async function startSession() {
+            try {
+                log('创建采集会话...');
+                const result = await apiCall('/api/capture/start', {
+                    method: 'POST',
+                    body: JSON.stringify({ source: 'system_loopback' })
+                });
+                
+                if (result.session_id) {
+                    currentSessionId = result.session_id;
+                    document.getElementById('currentSessionId').textContent = currentSessionId;
+                    document.getElementById('sessionInfo').classList.remove('hidden');
+                    document.getElementById('btnStartRecording').disabled = false;
+                    document.getElementById('statusDot').classList.add('active');
+                    document.getElementById('statusText').textContent = '会话已创建，等待请求录制';
+                    log(`会话创建成功: ${currentSessionId}`, 'success');
+                }
+            } catch (error) {
+                log(`创建会话失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 请求开始录制
+        async function requestRecording() {
+            if (!currentSessionId) {
+                log('请先创建会话', 'error');
+                return;
+            }
+            
+            try {
+                log('请求开始录制...');
+                const result = await apiCall('/api/capture/request-recording', {
+                    method: 'POST',
+                    body: JSON.stringify({ session_id: currentSessionId })
+                });
+                
+                if (result.status === 'recording_requested') {
+                    document.getElementById('statusDot').classList.remove('active');
+                    document.getElementById('statusDot').classList.add('recording');
+                    document.getElementById('statusText').textContent = '正在录制... (Agent 已响应)';
+                    log('请求录制成功，等待 Agent 开始录制', 'success');
+                }
+            } catch (error) {
+                log(`请求录制失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 停止会话
+        async function stopSession() {
+            if (!currentSessionId) {
+                log('没有活跃的会话', 'error');
+                return;
+            }
+            
+            try {
+                log('停止会话...');
+                const result = await apiCall('/api/capture/stop', {
+                    method: 'POST',
+                    body: JSON.stringify({ session_id: currentSessionId })
+                });
+                
+                document.getElementById('statusDot').classList.remove('active', 'recording');
+                document.getElementById('statusText').textContent = '会话已停止';
+                document.getElementById('btnStartRecording').disabled = true;
+                log('会话已停止', 'success');
+                
+                // 刷新录音列表
+                setTimeout(() => loadRecordings(), 1000);
+            } catch (error) {
+                log(`停止会话失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 检查 Agent 状态
+        async function checkActiveSession() {
+            try {
+                const result = await apiCall('/api/capture/active');
+                const statusDiv = document.getElementById('agentStatus');
+                
+                if (result.session_id) {
+                    statusDiv.innerHTML = `
+                        <strong>状态:</strong> ${result.status}<br>
+                        <strong>会话ID:</strong> ${result.session_id}
+                    `;
+                    log(`Agent 已连接，会话: ${result.session_id}`, 'success');
+                } else {
+                    statusDiv.innerHTML = 'Agent 未连接或无活跃会话';
+                    log('Agent 未连接', 'info');
+                }
+            } catch (error) {
+                log(`检查状态失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 加载录音列表
+        async function loadRecordings() {
+            try {
+                log('加载录音列表...');
+                const result = await apiCall('/api/capture/list?limit=20');
+                const listDiv = document.getElementById('recordingsList');
+                
+                if (result.sessions && result.sessions.length > 0) {
+                    listDiv.innerHTML = result.sessions.map(s => `
+                        <div class="recording-item">
+                            <div class="info">
+                                <div class="name">${s.file_name || s.session_id}</div>
+                                <div class="meta">
+                                    时长: ${s.duration_sec?.toFixed(1) || 0}s | 
+                                    状态: ${s.status} | 
+                                    ${s.created_at?.slice(0, 19) || ''}
+                                </div>
+                            </div>
+                            <button class="btn btn-sm btn-primary" 
+                                    onclick="selectSession('${s.session_id}')">
+                                选择
+                            </button>
+                        </div>
+                    `).join('');
+                    log(`加载了 ${result.sessions.length} 条录音记录`, 'success');
+                } else {
+                    listDiv.innerHTML = '<div style="color: #aaa;">暂无录音记录</div>';
+                }
+            } catch (error) {
+                log(`加载列表失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 选择会话
+        function selectSession(sessionId) {
+            currentSessionId = sessionId;
+            document.getElementById('currentSessionId').textContent = sessionId;
+            document.getElementById('sessionInfo').classList.remove('hidden');
+            log(`已选择会话: ${sessionId}`, 'success');
+        }
+        
+        // 提取单旋律
+async function uploadWavFile() {
+    const fileInput = document.getElementById("wavFile");
+    const file = fileInput.files[0];
+    if (!file) {
+        log("请选择 WAV 文件", "error");
+        return;
+    }
+    if (!currentSessionId) {
+        log("请先创建或选择一个会话", "error");
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append("session_id", currentSessionId);
+    formData.append("audio_file", file);
+    
+    log("正在上传 WAV 文件...", "info");
+    
+    fetch(API_BASE + "/api/capture/upload-file", {
+        method: "POST",
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            log("✓ WAV 文件上传成功!", "success");
+            loadRecordings();
+        } else {
+            log("✗ 上传失败: " + data.error, "error");
+        }
+    })
+    .catch(e => log("✗ 上传失败: " + e.message, "error"));
+}
+
+        async function transcribeMelody() {
+            if (!currentSessionId) {
+                log('请先选择或创建会话', 'error');
+                return;
+            }
+            
+            try {
+                log('开始提取单旋律...', 'info');
+                const result = await apiCall('/api/capture/transcribe', {
+                    method: 'POST',
+                    body: JSON.stringify({ 
+                        session_id: currentSessionId,
+                        mode: 'melody'
+                    })
+                });
+                
+                if (result.ok) {
+                    log(`提取完成! MIDI: ${result.midi_file}`, 'success');
+                    alert('提取完成! 文件: ' + result.midi_file);
+                } else {
+                    log(`提取失败: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                log(`提取失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 多声部分离
+        async function transcribePolyphonic() {
+            if (!currentSessionId) {
+                log('请先选择或创建会话', 'error');
+                return;
+            }
+            
+            try {
+                log('开始多声部分离...', 'info');
+                const result = await apiCall('/api/capture/transcribe', {
+                    method: 'POST',
+                    body: JSON.stringify({ 
+                        session_id: currentSessionId,
+                        mode: 'polyphonic'
+                    })
+                });
+                
+                if (result.ok) {
+                    log(`分离完成! MIDI: ${result.midi_file}`, 'success');
+                    alert('分离完成! 文件: ' + result.midi_file);
+                } else {
+                    log(`分离失败: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                log(`分离失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 自动刷新已禁用
+        // setInterval(checkActiveSession, 3000);
+    </script>
+</body>
+</html>

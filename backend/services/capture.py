@@ -13,8 +13,11 @@ from flask import Blueprint, request, jsonify
 # 创建采集 Blueprint
 capture_bp = Blueprint('capture', __name__, url_prefix='/api/capture')
 
-# 会话存储（内存中，生产环境可用数据库）
+# 会话存储（文件持久化）
 _sessions = {}
+
+# 会话持久化文件
+SESSIONS_FILE = Path(__file__).parent.parent.parent / 'agent' / 'sessions.json'
 
 # 录音文件存储目录
 AGENT_RECORDINGS_DIR = Path(__file__).parent.parent.parent / 'agent' / 'recordings'
@@ -24,6 +27,28 @@ AGENT_RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
 # ============================================================================
 # 辅助函数
 # ============================================================================
+
+def load_sessions():
+    """从文件加载会话"""
+    global _sessions
+    if SESSIONS_FILE.exists():
+        try:
+            with open(SESSIONS_FILE, 'r', encoding='utf-8') as f:
+                _sessions = json.load(f)
+            print(f"✓ 已加载 {len(_sessions)} 个会话")
+        except Exception as e:
+            print(f"加载会话失败: {e}")
+
+def save_sessions():
+    """保存会话到文件"""
+    try:
+        with open(SESSIONS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(_sessions, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"保存会话失败: {e}")
+
+# 启动时加载会话
+load_sessions()
 
 def generate_session_id():
     """生成会话 ID"""
@@ -83,6 +108,7 @@ def start_session():
     }
     
     _sessions[session_id] = session
+    save_sessions()
     
     return jsonify({
         'session_id': session_id,
@@ -171,39 +197,71 @@ def register_file():
     
     session = _sessions[session_id]
     
-    # 更新会话信息
+    # 更新会话信息（元数据）
     session['status'] = 'recorded'
     session['file_name'] = data.get('file_name')
-    session['file_path'] = data.get('file_path')
+    session['file_path'] = data.get('file_path')  # Windows 路径
     session['sample_rate'] = data.get('sample_rate', 0)
     session['channels'] = data.get('channels', 0)
     session['duration_sec'] = data.get('duration_sec', 0)
     session['device_name'] = data.get('meta', {}).get('device_name')
     session['ended_at'] = datetime.now().isoformat()
+    save_sessions()
     
-    # 如果是本地路径，尝试复制到服务器
-    local_path = data.get('file_path')
-    if local_path and os.path.exists(local_path):
-        try:
-            # 获取日期目录
-            date_str = datetime.now().strftime("%Y%m%d")
-            dest_dir = get_session_dir(date_str)
-            
-            # 复制文件到服务器
-            import shutil
-            dest_path = dest_dir / data.get('file_name')
-            shutil.copy2(local_path, dest_path)
-            
-            # 更新路径为服务器路径
-            session['file_path'] = str(dest_path)
-            session['local_file_path'] = str(dest_path)
-        except Exception as e:
-            session['error'] = f"File copy failed: {str(e)}"
-    
+    # 返回提示上传文件
     return jsonify({
         'ok': True,
         'status': session['status'],
-        'session_id': session_id
+        'session_id': session_id,
+        'message': '请使用 /api/capture/upload-file 上传 WAV 文件'
+    })
+
+
+@capture_bp.route('/upload-file', methods=['POST'])
+def upload_file():
+    """
+    上传 WAV 文件到服务器
+    POST /api/capture/upload-file
+    
+    表单数据：
+    - session_id: 会话 ID
+    - audio_file: WAV 文件
+    """
+    session_id = request.form.get('session_id')
+    
+    if not session_id or session_id not in _sessions:
+        return jsonify({'error': 'Invalid session_id'}), 400
+    
+    if 'audio_file' not in request.files:
+        return jsonify({'error': 'No audio file provided'}), 400
+    
+    file = request.files['audio_file']
+    if file.filename == '':
+        return jsonify({'error': 'Empty filename'}), 400
+    
+    # 保存文件
+    date_str = datetime.now().strftime("%Y%m%d")
+    dest_dir = get_session_dir(date_str)
+    
+    # 获取文件名
+    filename = file.filename or f"{session_id}.wav"
+    file_path = dest_dir / filename
+    
+    file.save(str(file_path))
+    
+    # 更新会话
+    session = _sessions[session_id]
+    session['status'] = 'recorded'
+    session['file_name'] = filename
+    session['file_path'] = str(file_path)
+    session['local_file_path'] = str(file_path)
+    save_sessions()
+    
+    return jsonify({
+        'ok': True,
+        'status': 'uploaded',
+        'session_id': session_id,
+        'file_path': str(file_path)
     })
 
 

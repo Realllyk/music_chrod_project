@@ -12,9 +12,6 @@ import logging
 import json
 from datetime import datetime
 
-# 注册采集模块
-register_capture(app)
-
 # 添加 backend 目录到 Python 路径
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
@@ -29,6 +26,9 @@ from services.capture import register_blueprint as register_capture
 
 app = Flask(__name__)
 CORS(app)  # 启用跨域请求
+
+# 注册采集模块
+register_capture(app)
 
 # 日志配置
 logging.basicConfig(
@@ -64,6 +64,13 @@ current_music_source = None
 @app.errorhandler(400)
 def bad_request(error):
     return jsonify({'error': '请求错误', 'message': str(error)}), 400
+
+
+# 前端页面路由
+@app.route("/app")
+def app_page():
+    frontend_path = Path(__file__).parent.parent / "frontend" / "index.html"
+    return send_file(frontend_path)
 
 
 @app.errorhandler(404)
@@ -453,4 +460,8 @@ if __name__ == '__main__':
     logger.info("访问 http://localhost:5000 查看 API 文档")
     logger.info("="*60)
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(
+        debug=config['api'].get('debug', True),
+        host=config['api'].get('host', '0.0.0.0'),
+        port=config['api'].get('port', 5000)
+    )

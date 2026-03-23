@@ -219,9 +219,36 @@ class FlaskClient:
                 json=payload,
                 timeout=10
             )
+            if resp.status_code == 200:
+                data = resp.json()
+                # 如果后端要求上传文件
+                if data.get('message') and 'upload-file' in data['message']:
+                    return 'upload_required'
             return resp.status_code == 200
         except Exception as e:
             print(f"注册文件失败: {e}")
+            return False
+    
+    def upload_file(self, session_id, file_path):
+        """上传 WAV 文件到后端"""
+        try:
+            with open(file_path, 'rb') as f:
+                files = {'audio_file': (os.path.basename(file_path), f, 'audio/wav')}
+                data = {'session_id': session_id}
+                resp = requests.post(
+                    f"{self.base_url}/api/capture/upload-file",
+                    files=files,
+                    data=data,
+                    timeout=60
+                )
+                if resp.status_code == 200:
+                    print("✓ 文件上传成功")
+                    return True
+                else:
+                    print(f"✗ 文件上传失败: {resp.status_code}")
+                    return False
+        except Exception as e:
+            print(f"上传文件失败: {e}")
             return False
     
     def check_should_stop(self, session_id):
@@ -315,7 +342,15 @@ def record_session(recorder, client, session_id, recordings_dir):
     
     # 向后端注册文件
     print("📤 向后端注册文件...")
-    if client.register_file(meta):
+    result = client.register_file(meta)
+    if result == 'upload_required':
+        # 需要上传文件
+        print("⏳ 正在上传 WAV 文件...")
+        if client.upload_file(session_id, wav_path):
+            print("✓ 文件上传成功")
+        else:
+            print("✗ 文件上传失败（文件保留在本地）")
+    elif result:
         print("✓ 文件注册成功")
     else:
         print("✗ 文件注册失败（后端可能离线）")

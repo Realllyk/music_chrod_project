@@ -1,0 +1,17 @@
+{
+  "sess_20260323_183410_23bc00": {
+    "session_id": "sess_20260323_183410_23bc00",
+    "source": "system_loopback",
+    "status": "recorded",
+    "created_at": "2026-03-23T18:34:10.210772",
+    "started_at": null,
+    "ended_at": "2026-03-23T18:34:22.921776",
+    "file_name": "sess_20260323_183410_23bc00.wav",
+    "file_path": "D:\\Project\\music_chrod_project\\agent\\recordings\\20260323\\sess_20260323_183410_23bc00.wav",
+    "duration_sec": 8.277333333333333,
+    "sample_rate": 48000,
+    "channels": 2,
+    "device_name": null,
+    "error": null
+  }
+}
