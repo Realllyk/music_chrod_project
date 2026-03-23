@@ -4,6 +4,7 @@
 """
 
 import os
+import uuid
 from flask import Blueprint, request, jsonify, send_file
 from pathlib import Path
 from sources import SourceFactory
@@ -36,7 +37,6 @@ def switch_source():
     
     try:
         source = SourceFactory.set_current(source_name, source_config)
-        # 认证
         source.authenticate()
         return jsonify({
             'ok': True,
@@ -103,6 +103,47 @@ def upload_music():
         'file_path': str(file_path),
         'size': os.path.getsize(file_path)
     })
+
+
+@music_controller.route('/upload/avatar', methods=['POST'])
+def upload_avatar():
+    """上传头像"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'Empty filename'}), 400
+    
+    ext = Path(file.filename).suffix.lower()
+    if ext.lower() not in ['.jpg', '.jpeg', '.png', '.gif']:
+        return jsonify({'error': 'Invalid image format'}), 400
+    
+    filename = f"avatar_{uuid.uuid4().hex}{ext}"
+    avatar_dir = Path(__file__).parent.parent / 'uploads' / 'avatars'
+    avatar_dir.mkdir(parents=True, exist_ok=True)
+    file_path = avatar_dir / filename
+    file.save(str(file_path))
+    
+    return jsonify({
+        'ok': True,
+        'path': f"/api/uploads/avatars/{filename}",
+        'filename': filename
+    })
+
+
+# ============================================================================
+# 静态文件服务
+# ============================================================================
+
+@music_controller.route('/uploads/avatars/<filename>', methods=['GET'])
+def serve_avatar(filename):
+    """服务头像文件"""
+    avatar_dir = Path(__file__).parent.parent / 'uploads' / 'avatars'
+    file_path = avatar_dir / filename
+    if file_path.exists():
+        return send_file(file_path)
+    return jsonify({'error': 'File not found'}), 404
 
 
 # ============================================================================

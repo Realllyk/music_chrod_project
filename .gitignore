@@ -9,3 +9,4 @@ instance/
 .mypy_cache/
 backend/outputs/
 agent/recordings/
+plan/

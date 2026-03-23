@@ -189,26 +189,32 @@ def get_session_detail(session_id):
 # 识别 API
 # ============================================================================
 
-@capture_controller.route('/transcribe', methods=['POST'])
+@capture_controller.route('/transcribe', methods=['PUT'])
 def transcribe_session():
     """对采集的音频进行识别"""
     data = request.get_json() or {}
+    song_id = data.get('song_id')
     session_id = data.get('session_id')
     mode = data.get('mode', 'melody')
     
-    session = CaptureService.get_session(session_id)
-    if not session:
-        return jsonify({'error': 'Invalid session_id'}), 400
+    # 获取歌曲信息
+    song = SongsService.get_song_by_id(song_id)
+    if not song:
+        # 如果没有 song_id，尝试通过 session_id 获取
+        if session_id:
+            session = CaptureService.get_session(session_id)
+            if session:
+                file_path = session.get('file_path')
+                session_id = session_id
+        else:
+            return jsonify({'error': 'Invalid song_id or session_id'}), 400
+    else:
+        file_path = song.get('audio_path')
     
-    # 检查文件是否存在
-    file_path = session.get('file_path')
     if not file_path or not os.path.exists(file_path):
         return jsonify({'error': 'Audio file not found'}), 404
     
     try:
-        # 更新状态
-        CaptureService.update_session(session_id, {'status': 'transcribing'})
-        
         # 执行识别
         if mode == 'polyphonic':
             transcriber = PolyphonicTranscriber()
@@ -218,37 +224,25 @@ def transcribe_session():
         result = transcriber.transcribe(file_path)
         
         # 保存 MIDI
-        midi_filename = f"{session_id}_{mode}.mid"
+        import uuid
+        midi_filename = f"song_{song_id}_{mode}_{uuid.uuid4().hex[:6]}.mid"
         midi_dir = Path(__file__).parent.parent / 'outputs'
         midi_dir.mkdir(exist_ok=True)
         midi_path = midi_dir / midi_filename
         transcriber.save_midi(str(midi_path))
         
-        # 创建歌曲记录
-        song_data = {
-            'title': session.get('file_name', '未命名').replace('.wav', ''),
-            'source': 'wasapi_loopback',
-            'audio_path': file_path,
-            'duration': int(session.get('duration_sec', 0) * 1000),
-            'status': 'completed',
-            'session_id': session_id
-        }
-        
+        # 更新歌曲记录
+        update_data = {'status': 'completed'}
         if mode == 'melody':
-            song_data['melody_path'] = str(midi_path)
+            update_data['melody_path'] = str(midi_path)
         else:
-            song_data['chord_path'] = str(midi_path)
+            update_data['chord_path'] = str(midi_path)
         
-        song_id = SongsService.add_song(song_data)
+        SongsService.update_song(song_id, update_data)
         
         # 添加分析结果
-        SongsService.add_analysis(song_id, mode, result, str(midi_path))
-        
-        # 关联歌曲到会话
-        CaptureService.update_session(session_id, {'song_id': song_id})
-        
-        # 更新状态
-        CaptureService.update_session(session_id, {'status': 'done'})
+        analysis_type = 'chord' if mode == 'polyphonic' else mode
+        SongsService.add_analysis(song_id, analysis_type, result, str(midi_path))
         
         return jsonify({
             'ok': True,
@@ -260,5 +254,102 @@ def transcribe_session():
         })
         
     except Exception as e:
-        CaptureService.update_session(session_id, {'status': 'failed'})
         return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# 简化后的录音接口
+# ============================================================================
+
+@capture_controller.route('/start-recording', methods=['POST'])
+def start_recording():
+    """开始录音（创建会话+请求录制）"""
+    data = request.get_json() or {}
+    source = data.get('source', 'system_loopback')
+    
+    # 创建会话
+    session = CaptureService.create_session(source)
+    session_id = session['session_id']
+    
+    # 请求开始录制
+    CaptureService.update_status(session_id, 'recording')
+    
+    return jsonify({
+        'ok': True,
+        'session_id': session_id,
+        'status': 'recording',
+        'message': '已开始录音'
+    })
+
+
+@capture_controller.route('/stop-recording', methods=['PUT'])
+def stop_recording():
+    """停止录音"""
+    data = request.get_json() or {}
+    session_id = data.get('session_id')
+    
+    # 如果没有指定 session_id，获取当前活跃的
+    if not session_id:
+        session = CaptureService.get_active_session()
+        if session:
+            session_id = session['session_id']
+    
+    if not session_id:
+        return jsonify({'error': 'No active session'}), 400
+    
+    CaptureService.update_status(session_id, 'stopped')
+    
+    return jsonify({
+        'ok': True,
+        'status': 'stopped',
+        'message': '已停止录音'
+    })
+
+
+@capture_controller.route('/save', methods=['POST'])
+def save_recording():
+    """保存录音文件名"""
+    data = request.get_json() or {}
+    session_id = data.get('session_id')
+    file_name = data.get('file_name', '未命名')
+    
+    if not session_id:
+        return jsonify({'error': 'session_id is required'}), 400
+    
+    # 获取会话信息
+    session = CaptureService.get_session(session_id)
+    if not session:
+        return jsonify({'error': 'Invalid session_id'}), 400
+    
+    # 添加 .wav 后缀
+    if not file_name.endswith('.wav'):
+        file_name = file_name + '.wav'
+    
+    # 更新文件名
+    CaptureService.update_session(session_id, {'file_name': file_name})
+    
+    return jsonify({
+        'ok': True,
+        'session_id': session_id,
+        'file_name': file_name,
+        'message': '保存成功'
+    })
+
+
+@capture_controller.route('/recordings', methods=['GET'])
+def get_recordings():
+    """获取录音文件列表（用于创建歌曲时选择音源）"""
+    result = CaptureService.list_sessions(limit=100)
+    sessions = result[0] if isinstance(result, tuple) else result
+    
+    recordings = []
+    for s in sessions:
+        if isinstance(s, dict) and s.get('file_path'):
+            recordings.append({
+                'session_id': s.get('session_id'),
+                'file_name': s.get('file_name'),
+                'file_path': s.get('file_path'),
+                'duration_sec': s.get('duration_sec')
+            })
+    
+    return jsonify({'recordings': recordings})

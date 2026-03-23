@@ -257,7 +257,7 @@ class PolyphonicTranscriber:
                     freqs.append(0)
             
             # 将频率转换为基频
-            pitches = librosa.frames_to_hz(np.array(freqs), sr=self.sr)
+            pitches = librosa.core.frames_to_time(np.array(freqs), sr=self.sr)
             
             # 转换为音符
             notes = self._freq_to_notes(pitches)
@@ -331,7 +331,7 @@ class PolyphonicTranscriber:
         instruments_list = [
             instrument.Flute(),
             instrument.Violin(),
-            instrument.Cello(),
+            instrument.fromString("cello"),
             instrument.Contrabass()
         ]
         
