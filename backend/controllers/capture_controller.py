@@ -56,7 +56,8 @@ def get_active_session():
             'session_id': session['session_id'],
             'status': session['status']
         })
-    return jsonify({'session_id': None, 'status': None}), 404
+    # 返回 200 而不是 404，避免日志刷屏
+    return jsonify({'session_id': None, 'status': None})
 
 
 @capture_controller.route('/request-recording', methods=['POST'])
