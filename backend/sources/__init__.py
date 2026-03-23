@@ -6,6 +6,7 @@
 from .base import AudioSource
 from .spotify import SpotifySource
 from .local_file import LocalFileSource
+from .wav_file import WavFileSource
 
 
 class SourceFactory:
@@ -14,6 +15,7 @@ class SourceFactory:
     _sources = {
         'spotify': SpotifySource,
         'local_file': LocalFileSource,
+        'wav_file': WavFileSource,
     }
     
     _current_source = None
@@ -82,4 +84,4 @@ class SourceFactory:
         return cls._current_source
 
 
-__all__ = ['AudioSource', 'SpotifySource', 'LocalFileSource', 'SourceFactory']
+__all__ = ['AudioSource', 'SpotifySource', 'LocalFileSource', 'WavFileSource', 'SourceFactory']
