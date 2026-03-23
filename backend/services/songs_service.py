@@ -4,6 +4,8 @@
 """
 
 from mappers.songs_mapper import SongsMapper
+from mappers.artists_mapper import ArtistsMapper
+from mappers.song_analysis_mapper import SongAnalysisMapper
 from database import DatabaseConnection
 
 
@@ -41,16 +43,33 @@ class SongsService:
         return SongsMapper.delete(song_id)
     
     @staticmethod
-    def create_song_from_session(session_data, midi_path=None):
+    def create_song_from_session(session_data, melody_path=None, chord_path=None):
         """从采集会话创建歌曲记录"""
         song_data = {
-            'title': session_data.get('file_name', '未命名'),
+            'title': session_data.get('file_name', '未命名').replace('.wav', ''),
             'source': 'wasapi_loopback',
             'source_id': session_data.get('session_id'),
             'audio_path': session_data.get('file_path'),
-            'midi_path': midi_path,
             'duration': int(session_data.get('duration_sec', 0) * 1000),
-            'status': 'completed' if midi_path else 'pending',
-            'session_id': session_data.get('session_id')
+            'status': 'completed' if (melody_path or chord_path) else 'pending',
+            'session_id': session_data.get('session_id'),
+            'melody_path': melody_path,
+            'chord_path': chord_path
         }
         return SongsMapper.insert(song_data)
+    
+    @staticmethod
+    def add_analysis(song_id, analysis_type, result_json, midi_path):
+        """添加分析结果"""
+        analysis_data = {
+            'song_id': song_id,
+            'analysis_type': analysis_type,
+            'result_json': result_json,
+            'midi_path': midi_path
+        }
+        return SongAnalysisMapper.insert(analysis_data)
+    
+    @staticmethod
+    def get_analyses(song_id):
+        """获取歌曲的所有分析结果"""
+        return SongAnalysisMapper.find_by_song_id(song_id)

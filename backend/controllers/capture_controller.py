@@ -43,7 +43,7 @@ def start_session():
         'session_id': session['session_id'],
         'status': session['status'],
         'source': source,
-        'created_at': session['created_at']
+        'created_at': session['created_at'].isoformat() if session.get('created_at') else None
     })
 
 
@@ -158,20 +158,21 @@ def list_sessions():
     limit = request.args.get('limit', 50, type=int)
     status_filter = request.args.get('status')
     
-    sessions = CaptureService.list_sessions(limit, status_filter)
+    sessions, total = CaptureService.list_sessions(limit, status_filter)
     
     result = []
     for s in sessions:
+        created_at = s.get('created_at')
         result.append({
             'session_id': s.get('session_id'),
             'source': s.get('source'),
             'status': s.get('status'),
-            'created_at': s.get('created_at'),
+            'created_at': created_at.isoformat() if created_at else None,
             'duration_sec': s.get('duration_sec'),
             'file_name': s.get('file_name')
         })
     
-    return jsonify({'sessions': result, 'total': len(result)})
+    return jsonify({'sessions': result, 'total': total})
 
 
 @capture_controller.route('/detail/<session_id>', methods=['GET'])
@@ -223,7 +224,27 @@ def transcribe_session():
         transcriber.save_midi(str(midi_path))
         
         # 创建歌曲记录
-        song_id = SongsService.create_song_from_session(session, str(midi_path))
+        song_data = {
+            'title': session.get('file_name', '未命名').replace('.wav', ''),
+            'source': 'wasapi_loopback',
+            'audio_path': file_path,
+            'duration': int(session.get('duration_sec', 0) * 1000),
+            'status': 'completed',
+            'session_id': session_id
+        }
+        
+        if mode == 'melody':
+            song_data['melody_path'] = str(midi_path)
+        else:
+            song_data['chord_path'] = str(midi_path)
+        
+        song_id = SongsService.add_song(song_data)
+        
+        # 添加分析结果
+        SongsService.add_analysis(song_id, mode, result, str(midi_path))
+        
+        # 关联歌曲到会话
+        CaptureService.update_session(session_id, {'song_id': song_id})
         
         # 更新状态
         CaptureService.update_session(session_id, {'status': 'done'})
@@ -238,5 +259,5 @@ def transcribe_session():
         })
         
     except Exception as e:
-        CaptureService.update_session(session_id, {'status': 'failed', 'error': str(e)})
+        CaptureService.update_session(session_id, {'status': 'failed'})
         return jsonify({'error': str(e)}), 500

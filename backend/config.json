@@ -34,12 +34,12 @@
     "logs": "./logs"
   },
   "database": {
-    "enabled": false,
+    "enabled": true,
     "host": "localhost",
     "port": 3306,
-    "database": "music_db",
-    "user": "root",
-    "password": "",
+    "database": "music_chrod_project",
+    "user": "aemeath",
+    "password": "paper_plane",
     "charset": "utf8mb4"
   }
 }

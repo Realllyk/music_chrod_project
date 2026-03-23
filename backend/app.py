@@ -19,14 +19,12 @@ from database import DatabaseConnection
 
 # 导入 Controllers
 from controllers import (
+    home_controller,
     songs_controller,
     capture_controller,
     health_controller,
     music_controller
 )
-
-# 导入 Service（初始化）
-from services import CaptureService
 
 # ============================================================================
 # 初始化 Flask 应用
@@ -62,17 +60,16 @@ app.config['CONFIG'] = config
 # 注册 Controllers
 # ============================================================================
 
+app.register_blueprint(home_controller)
 app.register_blueprint(songs_controller)
 app.register_blueprint(capture_controller)
 app.register_blueprint(health_controller)
 app.register_blueprint(music_controller)
 
 # ============================================================================
+# ============================================================================
 # 初始化
 # ============================================================================
-
-# 初始化采集服务
-CaptureService.init()
 
 # 日志
 logger.info("=" * 50)
