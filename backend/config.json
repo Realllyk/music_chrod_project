@@ -32,5 +32,14 @@
     "uploads": "./uploads",
     "outputs": "./outputs",
     "logs": "./logs"
+  },
+  "database": {
+    "enabled": false,
+    "host": "localhost",
+    "port": 3306,
+    "database": "music_db",
+    "user": "root",
+    "password": "",
+    "charset": "utf8mb4"
   }
 }
