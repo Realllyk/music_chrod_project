@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>歌手详情</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;margin:0;padding:20px}
+.card{background:#fff;border-radius:12px;padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.05)}
+.card h3{font-size:18px;margin-bottom:16px}
+.btn{padding:10px 20px;border:none;border-radius:8px;font-size:14px;cursor:pointer;margin-right:10px}
+.btn-primary{background:#4ecdc4;color:#fff}
+.btn-danger{background:#ff6b6b;color:#fff}
+.btn-secondary{background:#95a5a6;color:#fff}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;margin-bottom:6px;color:#666}
+.form-group input{width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box}
+</style>
+</head>
+<body>
+<a href="/artists"><button class="btn btn-secondary">← 返回列表</button></a>
+<h1>👤 歌手详情</h1>
+<div class="card">
+<h3>头像</h3>
+<div id="artistDetailAvatarPreview" style="margin-bottom:16px"></div>
+<div class="form-group"><label>更换头像</label><input type="file" id="artistDetailAvatarFile" accept="image/*"></div>
+</div>
+<div class="card">
+<h3>基本信息</h3>
+<div class="form-group"><label>ID</label><input type="text" id="artistDetailId" disabled></div>
+<div class="form-group"><label>名字 *</label><input type="text" id="artistDetailName"></div>
+<div class="form-group"><label>简介</label><input type="text" id="artistDetailBio"></div>
+</div>
+<div class="card">
+<h3>操作</h3>
+<button class="btn btn-primary" onclick="saveArtistDetail()">保存修改</button>
+<button class="btn btn-danger" onclick="deleteArtistDetail()">删除</button>
+</div>
+<script>
+const API_BASE = '';
+let currentArtistDetailId=null;
+function init(){
+    const params=new URLSearchParams(window.location.search);
+    const id=params.get('id');
+    if(!id){window.location.href='/artists';return;}
+    loadArtistDetail(id);
+}
+async function loadArtistDetail(id){
+    currentArtistDetailId=id;
+    try{
+        const r=await fetch(API_BASE+'/api/songs/artists/'+id).then(x=>x.json());
+        if(r.error){alert(r.error);return;}
+        document.getElementById('artistDetailId').value=r.id||'';
+        document.getElementById('artistDetailName').value=r.name||'';
+        document.getElementById('artistDetailBio').value=r.bio||'';
+        const avatarPreview=document.getElementById('artistDetailAvatarPreview');
+        if(r.avatar){avatarPreview.innerHTML='<img src="'+r.avatar+'" style="width:100px;height:100px;border-radius:50%;object-fit:cover">';}
+        else{avatarPreview.innerHTML='<div style="width:100px;height:100px;border-radius:50%;background:#ddd;display:flex;align-items:center;justify-content:center;font-size:40px;color:#888">👤</div>';}
+    }catch(e){alert(e.message);}
+}
+async function saveArtistDetail(){
+    const name=document.getElementById('artistDetailName').value;
+    if(!name){alert('请输入名字');return;}
+    const bio=document.getElementById('artistDetailBio').value;
+    const avatarFile=document.getElementById('artistDetailAvatarFile').files[0];
+    if(avatarFile){
+        const formData=new FormData();
+        formData.append('name',name);
+        formData.append('bio',bio);
+        formData.append('avatar',avatarFile);
+        try{
+            const r=await fetch(API_BASE+'/api/songs/artists/'+currentArtistDetailId,{method:'PUT',body:formData}).then(x=>x.json());
+            if(r.ok){alert('保存成功');window.location.href='/artists';}else{alert(r.error||'保存失败');}
+        }catch(e){alert(e.message);}
+    }else{
+        try{
+            const r=await fetch(API_BASE+'/api/songs/artists/'+currentArtistDetailId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,bio})}).then(x=>x.json());
+            if(r.ok){alert('保存成功');window.location.href='/artists';}else{alert(r.error||'保存失败');}
+        }catch(e){alert(e.message);}
+    }
+}
+async function deleteArtistDetail(){
+    if(!confirm('确定删除这个歌手？'))return;
+    try{
+        const r=await fetch(API_BASE+'/api/songs/artists/'+currentArtistDetailId,{method:'DELETE'}).then(x=>x.json());
+        if(r.ok){alert('删除成功');window.location.href='/artists';}else{alert(r.error||'删除失败');}
+    }catch(e){alert(e.message);}
+}
+init();
+</script>
+</body>
+</html>

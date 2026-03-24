@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>歌曲提取</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;margin:0;padding:20px}
+.card{background:#fff;border-radius:12px;padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.05)}
+.card h3{font-size:18px;margin-bottom:16px}
+.btn{padding:10px 20px;border:none;border-radius:8px;font-size:14px;cursor:pointer;margin-right:10px}
+.btn-primary{background:#4ecdc4;color:#fff}
+.btn-secondary{background:#95a5a6;color:#fff}
+.form-group{margin-bottom:16px}
+.form-group input{width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box}
+.song-item{padding:12px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<h1>歌曲提取</h1>
+<p>选择歌曲进行旋律提取或和弦分离</p>
+<div class="card">
+<div class="form-group"><input type="text" id="transcribeSearch" placeholder="搜索歌曲..." onkeyup="if(event.key==='Enter')loadTranscribeSongs()"></div>
+<button class="btn btn-primary" onclick="loadTranscribeSongs()">搜索</button>
+<button class="btn btn-secondary" onclick="document.getElementById('transcribeSearch').value='';loadTranscribeSongs()">清除</button>
+<div id="transcribeSongsList" style="margin-top:20px"></div>
+</div>
+<div class="card" id="transcribeTaskCard" style="display:none">
+<h3>提取状态</h3>
+<div id="transcribeTaskStatus"></div>
+</div>
+<script>
+const API_BASE = '';
+let transcribePollTimer=null;
+async function loadTranscribeSongs(){
+    const kw=document.getElementById('transcribeSearch').value;
+    try{
+        const r=await fetch(API_BASE+'/api/songs/list?keyword='+encodeURIComponent(kw)).then(x=>x.json());
+        const d=document.getElementById('transcribeSongsList');
+        if(r.songs&&r.songs.length>0){
+            d.innerHTML=r.songs.map(s=>{let buttons='<button class="btn btn-primary" style="margin:2px" onclick="startTranscribe('+s.id+',\'melody\')">提取旋律</button>';buttons+='<button class="btn btn-secondary" style="margin:2px" onclick="startTranscribe('+s.id+',\'chord\')">分离和弦</button>';return'<div class="song-item"><span>'+s.title+' - '+(s.artist_name||'未知')+'</span><div>'+buttons+'</div></div>';}).join('');
+        }else{d.innerHTML='<p style="color:#aaa">暂无歌曲</p>';}
+    }catch(e){console.error(e);}
+}
+async function startTranscribe(songId,mode){
+    try{
+        const r=await fetch(API_BASE+'/api/transcribe/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({song_id:songId,mode:mode})}).then(x=>x.json());
+        if(r.ok){document.getElementById('transcribeTaskCard').style.display='block';document.getElementById('transcribeTaskStatus').innerHTML='<p>任务已提交，正在处理...</p><p>任务ID: '+r.task_id+'</p>';startPollTask(r.task_id);}else{alert(r.error||'提交失败');}
+    }catch(e){alert(e.message);}
+}
+function startPollTask(taskId){
+    if(transcribePollTimer)clearInterval(transcribePollTimer);
+    transcribePollTimer=setInterval(async()=>{
+        try{
+            const r=await fetch(API_BASE+'/api/transcribe/status/'+taskId).then(x=>x.json());
+            const statusDiv=document.getElementById('transcribeTaskStatus');
+            if(r.status==='completed'){clearInterval(transcribePollTimer);statusDiv.innerHTML='<p style="color:green">提取完成！</p><p>结果: '+r.result_path+'</p>';}
+            else if(r.status==='failed'){clearInterval(transcribePollTimer);statusDiv.innerHTML='<p style="color:red">提取失败</p><p>错误: '+r.error+'</p>';}
+            else{statusDiv.innerHTML='<p>状态: '+r.status+'</p>';}
+        }catch(e){console.error(e);}
+    },3000);
+}
+loadTranscribeSongs();
+</script>
+</body>
+<script src="/js/menu.js"></script>
+</html>
