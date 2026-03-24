@@ -1,25 +1,24 @@
 """
 数据库连接模块
-负责 MySQL 数据库连接管理
 """
-
+import json
 import pymysql
 from pathlib import Path
-import json
 
 
 class DatabaseConfig:
-    """数据库配置类"""
+    """数据库配置"""
     
     def __init__(self):
         self._config = self._load_config()
     
     def _load_config(self):
-        """从配置文件加载数据库配置"""
         config_path = Path(__file__).parent.parent / 'config.json'
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-        return config.get('database', {})
+        if config_path.exists():
+            with open(config_path) as f:
+                data = json.load(f)
+                return data.get('database', {})
+        return {'enabled': False}
     
     @property
     def enabled(self):
@@ -48,93 +47,48 @@ class DatabaseConfig:
     @property
     def charset(self):
         return self._config.get('charset', 'utf8mb4')
-    
-    def to_dict(self):
-        return {
-            'host': self.host,
-            'port': self.port,
-            'database': self.database,
-            'user': self.user,
-            'password': self.password,
-            'charset': self.charset
-        }
 
 
-class DatabaseConnection:
-    """数据库连接管理类"""
-    
-    _instance = None
-    _connection = None
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._config = DatabaseConfig()
-        return cls._instance
-    
-    def get_connection(self):
-        """获取数据库连接"""
-        if not self._config.enabled:
-            return None
-        
-        # 检查现有连接是否有效
-        if self._connection:
-            try:
-                self._connection.ping(reconnect=True)
-                return self._connection
-            except:
-                self._connection = None
-        
-        try:
-            self._connection = pymysql.connect(
-                host=self._config.host,
-                port=self._config.port,
-                user=self._config.user,
-                password=self._config.password,
-                database=self._config.database,
-                charset=self._config.charset,
-                cursorclass=pymysql.cursors.DictCursor
-            )
-            return self._connection
-        except Exception as e:
-            print(f"数据库连接失败: {e}")
-            return None
-    
-    def close(self):
-        """关闭数据库连接"""
-        if self._connection:
-            self._connection.close()
-            self._connection = None
-    
-    @property
-    def config(self):
-        return self._config
+# 全局配置
+_config = DatabaseConfig()
 
 
 def get_db():
-    """获取数据库连接（便捷函数）"""
-    return DatabaseConnection().get_connection()
-
-
-def test_connection(config_dict=None):
-    """
-    测试数据库连接
-    
-    Args:
-        config_dict: 可选的配置字典
-    
-    Returns:
-        tuple: (成功标志, 错误信息)
-    """
-    if config_dict is None:
-        config_dict = DatabaseConfig().to_dict()
+    """获取数据库连接（每次创建新连接）"""
+    if not _config.enabled:
+        return None
     
     try:
         conn = pymysql.connect(
-            **config_dict,
-            cursorclass=pymysql.cursors.DictCursor
+            host=_config.host,
+            port=_config.port,
+            user=_config.user,
+            password=_config.password,
+            database=_config.database,
+            charset=_config.charset,
+            cursorclass=pymysql.cursors.DictCursor,
+            connect_timeout=5,
+            read_timeout=10,
+            write_timeout=10
         )
-        conn.close()
-        return True, None
+        return conn
     except Exception as e:
-        return False, str(e)
+        print(f"数据库连接失败: {e}")
+        return None
+
+
+class DatabaseConnection:
+    """兼容类"""
+    
+    @staticmethod
+    def get_connection():
+        return get_db()
+
+
+def test_connection():
+    """测试数据库连接"""
+    conn = get_db()
+    if conn:
+        conn.close()
+        return True
+    return False

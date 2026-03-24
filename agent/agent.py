@@ -444,8 +444,16 @@ def main():
         
         end_time = datetime.now()
         
-        # 保存文件
-        wav_path, meta_path = build_session_paths(session_id, args.output)
+        # 输入文件名
+        print("\n请输入录音文件名（直接回车使用默认名称）:")
+        custom_name = input("文件名: ").strip()
+        
+        if custom_name:
+            # 使用自定义名称
+            if not custom_name.endswith('.wav'):
+                custom_name += '.wav'
+            wav_path = os.path.join(args.output, custom_name)
+        
         print(f"\n📁 保存文件: {wav_path}")
         
         file_size = write_wav(

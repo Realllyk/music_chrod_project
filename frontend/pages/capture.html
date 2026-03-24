@@ -11,6 +11,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .btn{padding:10px 20px;border:none;border-radius:8px;font-size:14px;cursor:pointer;margin-right:10px}
 .btn-primary{background:#4ecdc4;color:#fff}
 .btn-secondary{background:#95a5a6;color:#fff}
+.btn-danger{background:#ff6b6b;color:#fff}
 .form-group{margin-bottom:16px}
 .form-group label{display:block;margin-bottom:6px;color:#666}
 .form-group input{width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box}
@@ -28,8 +29,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="card">
 <h3>录音控制</h3>
 <div class="status"><div class="status-dot" id="statusDot"></div><span id="statusText">等待开始</span></div>
-<button class="btn btn-primary" onclick="startRecording()">开始录音</button>
-<button class="btn btn-secondary" onclick="stopRecording()">停止录音</button>
+<button class="btn btn-primary" id="startBtn" onclick="startRecording()">开始录音</button>
+<button class="btn btn-danger" id="stopBtn" onclick="stopRecording()" disabled>停止录音</button>
+</div>
+<div class="card">
+<h3>保存录音文件</h3>
+<div class="form-group"><label>选择录音文件（WAV/MP3）</label><input type="file" id="wavFile" accept=".wav,.mp3"></div>
+<div class="form-group"><label>会话ID</label><input type="text" id="uploadSessionId" placeholder="输入会话ID"></div>
+<button class="btn btn-primary" onclick="uploadWav()">上传录音文件</button>
 </div>
 <div class="card">
 <h3>保存录音</h3>
@@ -40,36 +47,94 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <script>
 const API_BASE = '';
 let currentSessionId = null;
+
+function setStatus(state){
+    const dot=document.getElementById('statusDot');
+    const text=document.getElementById('statusText');
+    const startBtn=document.getElementById('startBtn');
+    const stopBtn=document.getElementById('stopBtn');
+    if(state==='idle'){
+        dot.classList.remove('recording');
+        text.textContent='等待开始';
+        startBtn.disabled=false;
+        stopBtn.disabled=true;
+    }else if(state==='recording'){
+        dot.classList.add('recording');
+        text.textContent='录音中';
+        startBtn.disabled=true;
+        stopBtn.disabled=false;
+    }
+}
+
 async function startRecording(){
     try{
         const r=await fetch(API_BASE+'/api/capture/start-recording',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(x=>x.json());
-        if(r.ok){currentSessionId=r.session_id;document.getElementById('statusDot').classList.add('recording');document.getElementById('statusText').textContent='录音中';alert('已开始录音');}else{alert(r.error);}
-    }catch(e){alert(e.message);}
+        if(r.ok){
+            currentSessionId=r.session_id;
+            document.getElementById('uploadSessionId').value=r.session_id;
+            setStatus('recording');
+            alert('已开始录音: '+r.session_id);
+        }else{
+            alert('开始录音失败: '+(r.error||'未知错误'));
+        }
+    }catch(e){alert('开始录音失败: '+e.message);}
 }
+
 async function stopRecording(){
+    if(!currentSessionId){
+        alert('没有活跃的录音会话');return;
+    }
     try{
-        const r=await fetch(API_BASE+'/api/capture/stop-recording',{method:'PUT',headers:{'Content-Type':'application/json'},body:'{}'}).then(x=>x.json());
-        if(r.ok){document.getElementById('statusDot').classList.remove('recording');document.getElementById('statusText').textContent='已停止';alert('已停止');}else{alert(r.error);}
-    }catch(e){alert(e.message);}
+        const r=await fetch(API_BASE+'/api/capture/stop-recording',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:currentSessionId})}).then(x=>x.json());
+        if(r.ok){
+            setStatus('idle');
+            alert('已停止录音');
+        }else{
+            alert('停止录音失败: '+(r.error||'未知错误'));
+        }
+    }catch(e){alert('停止录音失败: '+e.message);}
 }
+
+async function uploadWav(){
+    const sessionId=document.getElementById('uploadSessionId').value;
+    const fileInput=document.getElementById('wavFile');
+    if(!sessionId){alert('请输入会话ID');return;}
+    if(!fileInput.files[0]){alert('请选择文件');return;}
+    
+    const formData=new FormData();
+    formData.append('session_id',sessionId);
+    formData.append('file',fileInput.files[0]);
+    
+    try{
+        const r=await fetch(API_BASE+'/api/capture/upload-wav',{method:'POST',body:formData}).then(x=>x.json());
+        if(r.ok){
+            alert('上传成功: '+r.file_path);
+            loadRecordings();
+        }else{
+            alert('上传失败: '+(r.error||'未知错误'));
+        }
+    }catch(e){alert('上传失败: '+e.message);}
+}
+
 async function saveRecording(){
     const name=document.getElementById('recordFileName').value;
     if(!name){alert('请输入文件名');return;}
+    if(!currentSessionId){alert('没有录音会话');return;}
     try{
         const r=await fetch(API_BASE+'/api/capture/save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:currentSessionId,file_name:name})}).then(x=>x.json());
         if(r.ok){alert('保存成功');loadRecordings();}else{alert(r.error);}
     }catch(e){alert(e.message);}
 }
+
 async function loadRecordings(){
     try{
         const r=await fetch(API_BASE+'/api/capture/list?limit=20').then(x=>x.json());
         const d=document.getElementById('recordingsList');
         if(r.sessions&&r.sessions.length>0){
-            d.innerHTML='<table class="table"><tr><th>文件名</th><th>状态</th></tr>'+r.sessions.map(s=>'<tr><td>'+(s.file_name||'-')+'</td><td>'+s.status+'</td></tr>').join('')+'</table>';
+            d.innerHTML='<table class="table"><tr><th>会话ID</th><th>文件名</th><th>状态</th></tr>'+r.sessions.map(s=>'<tr><td>'+s.session_id+'</td><td>'+(s.file_name||'-')+'</td><td>'+s.status+'</td></tr>').join('')+'</table>';
         }else{d.innerHTML='<p style="color:#aaa">暂无</p>';}
     }catch(e){}
 }
 </script>
 </body>
-<script src="/js/menu.js"></script>
 </html>

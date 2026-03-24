@@ -113,12 +113,16 @@ def upload_file():
     if file.filename == '':
         return jsonify({'error': 'Empty filename'}), 400
     
-    # 保存文件
+    # 保存文件到 backend 自己的目录
     from datetime import datetime
+    import uuid
     date_str = datetime.now().strftime("%Y%m%d")
-    dest_dir = get_session_dir(date_str)
+    dest_dir = Path(__file__).parent.parent / 'uploads' / 'recordings' / date_str
+    dest_dir.mkdir(parents=True, exist_ok=True)
     
-    filename = file.filename or f"{session_id}.wav"
+    # 使用原始文件名或生成唯一文件名
+    original_name = file.filename or f"{session_id}.wav"
+    filename = f"{uuid.uuid4().hex[:8]}_{original_name}"
     file_path = dest_dir / filename
     
     file.save(str(file_path))
@@ -353,3 +357,51 @@ def get_recordings():
             })
     
     return jsonify({'recordings': recordings})
+
+
+@capture_controller.route('/upload-wav', methods=['POST'])
+def upload_wav():
+    """上传 WAV 录音文件"""
+    session_id = request.form.get('session_id')
+    wav_file = request.files.get('file')
+    
+    if not session_id or not wav_file:
+        return jsonify({'error': 'session_id and file are required'}), 400
+    
+    # 保存文件
+    import uuid
+    from pathlib import Path
+    
+    ext = Path(wav_file.filename).suffix.lower()
+    if ext not in ['.wav', '.mp3']:
+        return jsonify({'error': 'only wav/mp3 files allowed'}), 400
+    
+    filename = f"{session_id}_{uuid.uuid4().hex[:6]}{ext}"
+    upload_dir = Path(__file__).parent.parent / 'uploads' / 'recordings'
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    file_path = upload_dir / filename
+    wav_file.save(str(file_path))
+    
+    # 更新会话
+    CaptureService.update_session(session_id, {
+        'file_path': f"/api/uploads/recordings/{filename}",
+        'file_name': wav_file.filename,
+        'status': 'stopped'
+    })
+    
+    return jsonify({
+        'ok': True,
+        'session_id': session_id,
+        'file_path': f"/api/uploads/recordings/{filename}"
+    })
+
+
+@capture_controller.route('/uploads/recordings/<filename>', methods=['GET'])
+def serve_recording(filename):
+    """服务录音文件"""
+    from pathlib import Path
+    recordings_dir = Path(__file__).parent.parent / 'uploads' / 'recordings'
+    file_path = recordings_dir / filename
+    if file_path.exists():
+        return send_file(file_path)
+    return jsonify({'error': 'File not found'}), 404

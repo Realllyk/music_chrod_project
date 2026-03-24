@@ -92,7 +92,7 @@ class CaptureSessionsMapper:
             with conn.cursor() as cursor:
                 cursor.execute("""
                     SELECT * FROM capture_sessions 
-                    WHERE status IN ('ready', 'recording_requested')
+                    WHERE status IN ('ready', 'recording_requested', 'recording')
                     ORDER BY created_at DESC 
                     LIMIT 1
                 """)
