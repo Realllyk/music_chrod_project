@@ -291,6 +291,7 @@ def stop_recording():
     """停止录音"""
     data = request.get_json() or {}
     session_id = data.get('session_id')
+    file_name = data.get('file_name')  # 接收文件名
     
     # 如果没有指定 session_id，获取当前活跃的
     if not session_id:
@@ -301,11 +302,17 @@ def stop_recording():
     if not session_id:
         return jsonify({'error': 'No active session'}), 400
     
-    CaptureService.update_status(session_id, 'stopped')
+    # 更新状态和文件名
+    update_data = {'status': 'stopped'}
+    if file_name:
+        update_data['file_name'] = file_name
+    
+    CaptureService.update_session(session_id, update_data)
     
     return jsonify({
         'ok': True,
         'status': 'stopped',
+        'session_id': session_id,
         'message': '已停止录音'
     })
 

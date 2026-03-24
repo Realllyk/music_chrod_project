@@ -318,11 +318,17 @@ def record_session(recorder, client, session_id, recordings_dir):
     
     duration_sec = recorder.get_duration()
     
+    # 获取会话信息（包括文件名）
+    session_info = client.get_session(session_id)
+    use_file_name = session_info.get('file_name') if session_info else None
+    if not use_file_name:
+        use_file_name = os.path.basename(wav_path)
+    
     # 构建元数据
     meta = {
         "session_id": session_id,
         "source": "wasapi_loopback",
-        "file_name": os.path.basename(wav_path),
+        "file_name": use_file_name,
         "file_path": os.path.abspath(wav_path),
         "sample_rate": recorder.sample_rate,
         "channels": recorder.channels,
