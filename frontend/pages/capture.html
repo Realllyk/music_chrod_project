@@ -24,16 +24,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .modal.show{display:flex}
 .modal-content{background:#fff;padding:24px;border-radius:12px;width:90%;max-width:400px}
 .modal h3{margin-top:0}
+.modal-btns{display:flex;gap:10px;margin-top:16px}
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{padding:12px;text-align:left;border-bottom:1px solid #eee}
 </style>
 </head>
 <body>
 <h1>🎙️ 录音采集</h1>
-<p>通过 WASAPI 采集系统音频</p>
 <div class="card">
 <h3>录音控制</h3>
 <div class="status"><div class="status-dot" id="statusDot"></div><span id="statusText">等待开始</span></div>
 <button class="btn btn-primary" id="startBtn" onclick="startRecording()">开始录音</button>
 <button class="btn btn-danger" id="stopBtn" onclick="showStopDialog()" disabled>停止录音</button>
+</div>
+<div class="card"><h3>录音文件管理</h3>
+<button class="btn btn-secondary" onclick="location.href='/pages/recordings/index.html'">查看录音文件</button>
 </div>
 <div class="card"><h3>历史 <button class="btn btn-secondary" onclick="loadRecordings()">刷新</button></h3><div id="recordingsList"></div></div>
 
@@ -42,7 +47,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="modal-content">
 <h3>保存录音</h3>
 <div class="form-group"><label>输入文件名</label><input type="text" id="stopFileName" placeholder="例如: 我的歌.wav"></div>
-<div style="text-align:right">
+<div class="modal-btns">
+<button class="btn btn-secondary" onclick="discardRecording()">放弃</button>
 <button class="btn btn-secondary" onclick="closeStopDialog()">取消</button>
 <button class="btn btn-primary" onclick="confirmStop()">保存</button>
 </div>
@@ -88,6 +94,22 @@ async function confirmStop(){
     await stopRecording(fileName);
 }
 
+async function discardRecording(){
+    if(!confirm('确定要放弃这次录音吗？'))return;
+    closeStopDialog();
+    await discardRecord();
+}
+
+async function discardRecord(){
+    if(!currentSessionId){return;}
+    try{
+        await fetch(API_BASE+'/api/capture/sessions/'+currentSessionId,{method:'DELETE'});
+        setStatus('idle');
+        alert('已放弃录音');
+        currentSessionId=null;
+    }catch(e){alert('放弃失败: '+e.message);}
+}
+
 async function startRecording(){
     try{
         const r=await fetch(API_BASE+'/api/capture/start-recording',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(x=>x.json());
@@ -113,7 +135,7 @@ async function stopRecording(fileName){
         }).then(x=>x.json());
         if(r.ok){
             setStatus('idle');
-            alert('录音已保存: '+fileName+'\n\nAgent 将自动上传到后端');
+            alert('录音已保存: '+fileName);
             currentSessionId=null;
             loadRecordings();
         }else{
@@ -127,7 +149,7 @@ async function loadRecordings(){
         const r=await fetch(API_BASE+'/api/capture/list?limit=20').then(x=>x.json());
         const d=document.getElementById('recordingsList');
         if(r.sessions&&r.sessions.length>0){
-            d.innerHTML='<table><tr><th>会话ID</th><th>文件名</th><th>状态</th></tr>'+r.sessions.map(s=>'<tr><td>'+s.session_id+'</td><td>'+(s.file_name||'-')+'</td><td>'+s.status+'</td></tr>').join('')+'</table>';
+            d.innerHTML='<table class="table"><tr><th>会话ID</th><th>文件名</th><th>状态</th></tr>'+r.sessions.map(s=>'<tr><td>'+s.session_id+'</td><td>'+(s.file_name||'-')+'</td><td>'+s.status+'</td></tr>').join('')+'</table>';
         }else{d.innerHTML='<p style="color:#aaa">暂无</p>';}
     }catch(e){}
 }

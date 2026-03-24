@@ -403,6 +403,45 @@ def upload_wav():
     })
 
 
+@capture_controller.route('/sessions/<session_id>', methods=['DELETE'])
+def delete_session(session_id):
+    """删除录音会话"""
+    session = CaptureService.get_session(session_id)
+    if not session:
+        return jsonify({'error': 'Session not found'}), 404
+    
+    # 删除文件
+    file_path = session.get('file_path')
+    if file_path and os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except:
+            pass
+    
+    # 删除数据库记录
+    CaptureService.delete_session(session_id)
+    
+    return jsonify({'ok': True})
+
+
+@capture_controller.route('/sessions/<session_id>', methods=['PUT'])
+def update_session_info(session_id):
+    """更新会话信息（文件名等）"""
+    data = request.get_json() or {}
+    file_name = data.get('file_name')
+    
+    if not file_name:
+        return jsonify({'error': 'file_name is required'}), 400
+    
+    session = CaptureService.get_session(session_id)
+    if not session:
+        return jsonify({'error': 'Session not found'}), 404
+    
+    CaptureService.update_session(session_id, {'file_name': file_name})
+    
+    return jsonify({'ok': True, 'file_name': file_name})
+
+
 @capture_controller.route('/uploads/recordings/<filename>', methods=['GET'])
 def serve_recording(filename):
     """服务录音文件"""

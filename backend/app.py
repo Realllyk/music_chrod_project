@@ -80,6 +80,20 @@ logger.info(f"访问 http://localhost:{config['api']['port']}/app 查看前端")
 logger.info("=" * 50)
 
 # 启动 Flask
+# 关闭某些接口的日志
+import logging
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
+
+# 忽略特定路径的日志
+class QuietHandler(logging.Handler):
+    def emit(self, record):
+        if '/api/capture/active' in record.getMessage():
+            return
+        if record.status_code in [200, 204] and '/api/' in record.getMessage():
+            return
+        self.emit(record)
+
 if __name__ == '__main__':
     app.run(
         debug=config['api'].get('debug', True),

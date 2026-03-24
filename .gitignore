@@ -10,3 +10,5 @@ instance/
 backend/outputs/
 agent/recordings/
 plan/
+backend/uploads/
+outputs/

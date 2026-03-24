@@ -4,6 +4,7 @@
 """
 
 import uuid
+import os
 import threading
 from flask import Blueprint, request, jsonify
 from services.songs_service import SongsService
@@ -104,13 +105,11 @@ def run_transcription(task_id, song_id, mode):
             update_task(task_id, 'failed', error='Audio file not found')
             return
         
-        # 构建绝对路径
-        import os
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        full_audio_path = os.path.join(base_dir, audio_path.lstrip('/'))
+        # audio_path 已是完整路径，直接使用
+        full_audio_path = audio_path
         
         if not os.path.exists(full_audio_path):
-            update_task(task_id, 'failed', error='Audio file does not exist')
+            update_task(task_id, 'failed', error='Audio file does not exist: ' + full_audio_path)
             return
         
         # 执行提取
@@ -125,6 +124,7 @@ def run_transcription(task_id, song_id, mode):
         result = transcriber.transcribe(full_audio_path)
         
         # 保存 MIDI
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         output_dir = os.path.join(base_dir, 'outputs', 'transcribe')
         os.makedirs(output_dir, exist_ok=True)
         

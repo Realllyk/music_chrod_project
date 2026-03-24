@@ -45,7 +45,7 @@ pip install pyaudiowpatch requests
 python agent.py
 
 # 指定后端地址
-python agent.py --backend http://192.168.1.100:5000
+python agent.py --backend http://192.168.5.129:5000
 
 # 指定录音保存目录
 python agent.py --output D:/recordings
