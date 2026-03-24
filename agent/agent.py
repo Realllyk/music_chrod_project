@@ -504,7 +504,7 @@ def main():
             # 轮询后端
             session = client.get_active_session()
             
-            if session and session.get('status') in ['ready', 'recording_requested']:
+            if session and session.get('status') in ['ready', 'recording_requested', 'recording']:
                 session_id = session['session_id']
                 record_session(recorder, client, session_id, args.output)
                 print(f"\n⏳ 继续等待下一个采集任务...")
