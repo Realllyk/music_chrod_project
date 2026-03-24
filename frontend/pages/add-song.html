@@ -1,0 +1,97 @@
+<style>
+.page-header { margin-bottom: 30px; }
+.page-header h2 { font-size: 28px; color: #333; }
+.card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.card h3 { font-size: 18px; margin-bottom: 16px; }
+.btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; margin-right: 10px; }
+.btn-primary { background: #4ecdc4; color: #fff; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; margin-bottom: 6px; color: #666; }
+.form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; }
+</style>
+<div class="page-header"><h2>➕ 创建歌曲</h2></div>
+<div class="card">
+    <h3>歌曲信息</h3>
+    <div class="form-group"><label>歌曲名 *</label><input type="text" id="songTitle"></div>
+    <div class="form-group"><label>歌手</label><select id="songArtist"><option value="">-- 选择歌手 --</option></select></div>
+    <div class="form-group"><label>分类</label><input type="text" id="songCategory" placeholder="如：流行、古典"></div>
+    <div class="form-group"><label>音源类型</label>
+        <select id="audioSourceType" onchange="toggleAudioSource()">
+            <option value="recording">WAV录音</option>
+            <option value="file">本地文件</option>
+        </select>
+    </div>
+    <div class="form-group" id="recordingSelectGroup">
+        <label>选择录音</label>
+        <select id="recordingSession"><option value="">-- 选择录音文件 --</option></select>
+    </div>
+    <div class="form-group" id="audioFileGroup" style="display:none">
+        <label>上传音频</label><input type="file" id="audioFile" accept="audio/*">
+    </div>
+    <button class="btn btn-primary" onclick="createSong()">创建</button>
+</div>
+<script>
+function toggleAudioSource() {
+    const type = document.getElementById('audioSourceType').value;
+    document.getElementById('recordingSelectGroup').style.display = type==='recording'?'block':'none';
+    document.getElementById('audioFileGroup').style.display = type==='file'?'block':'none';
+}
+
+async function loadRecordingsForSong() {
+    try {
+        const r = await fetch(API_BASE+'/api/capture/recordings').then(x=>x.json());
+        const sel = document.getElementById('recordingSession');
+        sel.innerHTML = '<option value="">-- 选择录音文件 --</option>';
+        (r.recordings||[]).forEach(rec=>{
+            sel.innerHTML += '<option value="'+rec.session_id+'">'+rec.file_name+'</option>';
+        });
+    } catch(e){}
+}
+
+async function loadArtistsForSelect() {
+    try {
+        const r = await fetch(API_BASE+'/api/songs/artists/list').then(x=>x.json());
+        const sel = document.getElementById('songArtist');
+        if(sel){
+            sel.innerHTML = '<option value="">-- 选择歌手 --</option>';
+            (r.artists||[]).forEach(a=>{
+                sel.innerHTML += '<option value="'+a.id+'">'+a.name+'</option>';
+            });
+        }
+    } catch(e){}
+}
+
+async function createSong() {
+    const title = document.getElementById('songTitle').value;
+    if(!title){ alert('请输入歌曲名'); return; }
+    const artistId = document.getElementById('songArtist').value;
+    const category = document.getElementById('songCategory').value;
+    const sourceType = document.getElementById('audioSourceType').value;
+    
+    if(sourceType==='recording'){
+        const sessionId = document.getElementById('recordingSession').value;
+        if(!sessionId){ alert('请选择录音'); return; }
+        try {
+            const r = await fetch(API_BASE+'/api/songs/add', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,artist_id:artistId||null,category,session_id:sessionId})}).then(x=>x.json());
+            if(r.ok){ alert('创建成功! 歌曲ID: '+r.song_id); document.getElementById('songTitle').value=''; }
+            else{ alert(r.error); }
+        } catch(e){ alert(e.message); }
+    }else{
+        const audioFile = document.getElementById('audioFile').files[0];
+        if(!audioFile){ alert('请选择音频文件'); return; }
+        const formData = new FormData();
+        formData.append('title', title);
+        if(artistId) formData.append('artist_id', artistId);
+        if(category) formData.append('category', category);
+        formData.append('audio_file', audioFile);
+        try {
+            const r = await fetch(API_BASE+'/api/songs/add', {method:'POST', body:formData}).then(x=>x.json());
+            if(r.ok){ alert('创建成功! 歌曲ID: '+r.song_id); document.getElementById('songTitle').value=''; }
+            else{ alert(r.error); }
+        } catch(e){ alert(e.message); }
+    }
+}
+
+loadRecordingsForSong();
+loadArtistsForSelect();
+</script>

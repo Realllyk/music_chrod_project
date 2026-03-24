@@ -1,0 +1,45 @@
+<style>
+.page-header { margin-bottom: 30px; }
+.page-header h2 { font-size: 28px; color: #333; }
+.card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.card h3 { font-size: 18px; margin-bottom: 16px; }
+.btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; margin-right: 10px; }
+.btn-primary { background: #4ecdc4; color: #fff; }
+.btn-secondary { background: #95a5a6; color: #fff; }
+.form-group { margin-bottom: 16px; }
+.form-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; }
+.song-item { padding: 12px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.song-item:hover { background: #f8f9fa; }
+</style>
+<div class="page-header"><h2>🔍 查询歌曲</h2></div>
+<div class="card">
+    <div class="form-group">
+        <input type="text" id="songSearch" placeholder="搜索歌曲名或歌手名..." onkeyup="if(event.key==='Enter')searchSongs()">
+    </div>
+    <button class="btn btn-primary" onclick="searchSongs()">搜索</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('songSearch').value='';searchSongs()">清除</button>
+    <div id="songsList" style="margin-top:20px"></div>
+</div>
+<script>
+async function searchSongs() {
+    const kw = document.getElementById('songSearch').value;
+    try {
+        const r = await fetch(API_BASE+'/api/songs/list?keyword='+encodeURIComponent(kw)).then(x=>x.json());
+        const d = document.getElementById('songsList');
+        if(r.songs && r.songs.length>0){
+            d.innerHTML = r.songs.map(s=>'<div class="song-item" onclick="loadSongDetail('+s.id+')"><span>'+s.title+' - '+(s.artist_name||'未知')+'</span><span>'+(s.category||'')+'</span></div>').join('');
+        } else { d.innerHTML = '<p style="color:#aaa">暂无歌曲</p>'; }
+    } catch(e){}
+}
+
+async function loadSongDetail(id) {
+    try {
+        const r = await fetch(API_BASE+'/api/songs/'+id).then(x=>x.json());
+        if(r.error){ alert(r.error); return; }
+        sessionStorage.setItem('songDetail', JSON.stringify(r));
+        showPage('song-detail');
+    } catch(e){ alert(e.message); }
+}
+
+searchSongs();
+</script>

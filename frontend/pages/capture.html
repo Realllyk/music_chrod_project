@@ -1,0 +1,68 @@
+<style>
+.card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.card h3 { font-size: 18px; margin-bottom: 16px; }
+.btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; margin-right: 10px; }
+.btn-primary { background: #4ecdc4; color: #fff; }
+.btn-secondary { background: #95a5a6; color: #fff; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; margin-bottom: 6px; color: #666; }
+.form-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+.status { display: flex; align-items: center; gap: 10px; padding: 12px; background: #f8f9fa; border-radius: 8px; margin-bottom: 16px; }
+.status-dot { width: 12px; height: 12px; border-radius: 50%; background: #666; }
+.status-dot.recording { background: #ff6b6b; animation: pulse 0.5s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+</style>
+<div class="page-header"><h2>🎙️ 录音采集</h2><p>通过 WASAPI 采集系统音频</p></div>
+<div class="card">
+    <h3>录音控制</h3>
+    <div class="status"><div class="status-dot" id="statusDot"></div><span id="statusText">等待开始</span></div>
+    <button class="btn btn-primary" onclick="startRecording()">开始录音</button>
+    <button class="btn btn-secondary" onclick="stopRecording()">停止录音</button>
+</div>
+<div class="card">
+    <h3>保存录音</h3>
+    <div class="form-group"><label>文件名</label><input type="text" id="recordFileName" placeholder="输入文件名"></div>
+    <button class="btn btn-primary" onclick="saveRecording()">保存录音</button>
+</div>
+<div class="card"><h3>历史 <button class="btn btn-secondary" onclick="loadRecordings()">刷新</button></h3><div id="recordingsList"></div></div>
+<script>
+let currentSessionId = null;
+
+async function startRecording() {
+    try {
+        const r = await fetch(API_BASE+'/api/capture/start-recording', {method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(x=>x.json());
+        if(r.ok){ currentSessionId=r.session_id; document.getElementById('statusDot').classList.add('recording'); document.getElementById('statusText').textContent='录音中'; alert('已开始录音'); }
+        else{ alert(r.error); }
+    } catch(e){ alert(e.message); }
+}
+
+async function stopRecording() {
+    try {
+        const r = await fetch(API_BASE+'/api/capture/stop-recording', {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}).then(x=>x.json());
+        if(r.ok){ document.getElementById('statusDot').classList.remove('recording'); document.getElementById('statusText').textContent='已停止'; alert('已停止'); }
+        else{ alert(r.error); }
+    } catch(e){ alert(e.message); }
+}
+
+async function saveRecording() {
+    const name = document.getElementById('recordFileName').value;
+    if(!name){ alert('请输入文件名'); return; }
+    try {
+        const r = await fetch(API_BASE+'/api/capture/save', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:currentSessionId,file_name:name})}).then(x=>x.json());
+        if(r.ok){ alert('保存成功'); loadRecordings(); }
+        else{ alert(r.error); }
+    } catch(e){ alert(e.message); }
+}
+
+async function loadRecordings() {
+    try {
+        const r = await fetch(API_BASE+'/api/capture/list?limit=20').then(x=>x.json());
+        const d = document.getElementById('recordingsList');
+        if(r.sessions && r.sessions.length>0){
+            d.innerHTML = '<table class="table"><tr><th>文件名</th><th>状态</th></tr>'+r.sessions.map(s=>'<tr><td>'+(s.file_name||'-')+'</td><td>'+s.status+'</td></tr>').join('')+'</table>';
+        } else { d.innerHTML = '<p style="color:#aaa">暂无</p>'; }
+    } catch(e){}
+}
+</script>

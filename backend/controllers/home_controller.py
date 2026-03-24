@@ -26,3 +26,22 @@ def health():
         'status': 'ok',
         'message': 'Service is running'
     })
+
+@home_controller.route('/outputs/<path:filename>', methods=['GET'])
+def serve_output(filename):
+    """服务输出文件"""
+    from pathlib import Path
+    output_dir = Path(__file__).parent.parent / 'outputs'
+    file_path = output_dir / filename
+    if file_path.exists():
+        return send_file(file_path)
+    return jsonify({'error': 'File not found'}), 404
+
+@home_controller.route('/pages/<path:filename>')
+def serve_page(filename):
+    """服务页面文件"""
+    from flask import send_from_directory
+    import os
+    pages_dir = '/home/realllyka/project/music_chrod_project/frontend/pages'
+    print(f'Requesting page: {filename}, path: {pages_dir}')
+    return send_from_directory(pages_dir, filename)

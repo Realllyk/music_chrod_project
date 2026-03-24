@@ -193,12 +193,35 @@ def add_artist():
 
 @songs_controller.route('/artists/<int:artist_id>', methods=['PUT'])
 def update_artist(artist_id):
-    """更新歌手"""
-    data = request.get_json() or {}
-    
-    if ArtistsService.update_artist(artist_id, data):
-        return jsonify({'ok': True, 'message': 'Artist updated'})
-    return jsonify({'error': 'Failed to update artist'}), 500
+    """更新歌手（支持文件上传）"""
+    if request.content_type and 'multipart/form-data' in request.content_type:
+        name = request.form.get('name')
+        bio = request.form.get('bio')
+        avatar_file = request.files.get('avatar')
+        
+        data = {}
+        if name: data['name'] = name
+        if bio: data['bio'] = bio
+        
+        if avatar_file and avatar_file.filename:
+            import uuid
+            from pathlib import Path
+            ext = Path(avatar_file.filename).suffix.lower()
+            filename = f"avatar_{uuid.uuid4().hex}{ext}"
+            avatar_dir = Path(__file__).parent.parent / 'uploads' / 'avatars'
+            avatar_dir.mkdir(parents=True, exist_ok=True)
+            file_path = avatar_dir / filename
+            avatar_file.save(str(file_path))
+            data['avatar'] = f"/api/uploads/avatars/{filename}"
+        
+        if data and ArtistsService.update_artist(artist_id, data):
+            return jsonify({'ok': True, 'message': 'Artist updated'})
+        return jsonify({'error': 'Failed to update artist'}), 500
+    else:
+        data = request.get_json() or {}
+        if ArtistsService.update_artist(artist_id, data):
+            return jsonify({'ok': True, 'message': 'Artist updated'})
+        return jsonify({'error': 'Failed to update artist'}), 500
 
 
 @songs_controller.route('/artists/<int:artist_id>', methods=['DELETE'])

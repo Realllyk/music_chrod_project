@@ -13,45 +13,21 @@
         .sidebar-logo p { font-size: 12px; color: #888; margin-top: 5px; }
         .nav-item { padding: 15px 20px; cursor: pointer; display: flex; align-items: center; gap: 10px; color: #aaa; }
         .nav-item:hover { background: rgba(255,255,255,0.1); color: #fff; }
-        .nav-item.active { background: rgba(78, 205, 196, 0.2); color: #4ecdc4; border-left: 3px solid #4ecdc4; }
+        .nav-item.active { background: rgba(78, 205, 196, 0.2); color: #4ecdc4; }
         .nav-submenu { display: none; padding-left: 20px; }
         .nav-submenu.open { display: block; }
         .nav-item.sub { padding: 12px 20px; font-size: 14px; }
         .main-content { flex: 1; margin-left: 220px; padding: 30px; }
-        .page { display: none; }
-        .page.active { display: block; }
-        .page-header { margin-bottom: 30px; }
-        .page-header h2 { font-size: 28px; color: #333; }
-        .page-header p { color: #666; margin-top: 5px; }
-        .card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        .card h3 { font-size: 18px; margin-bottom: 16px; color: #333; }
-        .btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; margin-right: 10px; }
-        .btn-primary { background: #4ecdc4; color: #fff; }
-        .btn-secondary { background: #95a5a6; color: #fff; }
-        .table { width: 100%; border-collapse: collapse; }
-        .table th, .table td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-        .table th { background: #f8f9fa; color: #666; }
-        .form-group { margin-bottom: 16px; }
-        .form-group label { display: block; margin-bottom: 6px; color: #666; }
-        .form-group input, .form-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; }
-        .artist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 20px; }
-        .artist-card { background: #fff; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        .artist-avatar { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin: 0 auto 12px; background: #eee; }
-        .artist-name { font-size: 16px; font-weight: bold; }
-        .avatar-placeholder { width: 80px; height: 80px; border-radius: 50%; background: #ddd; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #888; }
-        .log { background: #1a1a2e; color: #0f0; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 12px; max-height: 150px; overflow-y: auto; }
-        .log-entry { margin-bottom: 4px; }
-        .log-entry.error { color: #ff6b6b; }
-        .log-entry.success { color: #4ecdc4; }
-        .song-list { margin-top: 16px; }
-        .song-item { padding: 12px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
-        .song-item:hover { background: #f8f9fa; }
     </style>
 </head>
 <body>
     <div class="sidebar">
         <div class="sidebar-logo"><h1>🎵 音乐扒谱</h1><p>Music</p></div>
         <div class="nav-item" onclick="showPage('capture')">🎙️ 录音采集</div>
+        <div class="nav-item" onclick="toggleMenu('transcribeMenu')">🎼 提取 ▾</div>
+        <div class="nav-submenu" id="transcribeMenu">
+            <div class="nav-item sub" onclick="showPage('transcribe')">🔍 选择歌曲</div>
+        </div>
         <div class="nav-item" onclick="toggleMenu('songMenu')">🎵 歌曲库 ▾</div>
         <div class="nav-submenu" id="songMenu">
             <div class="nav-item sub" onclick="showPage('songs')">🔍 查询歌曲</div>
@@ -63,252 +39,33 @@
             <div class="nav-item sub" onclick="showPage('add-artist')">➕ 新增歌手</div>
         </div>
     </div>
-    <div class="main-content">
-        <!-- 录音采集 -->
-        <div class="page" id="page-capture">
-            <div class="page-header"><h2>🎙️ 录音采集</h2><p>通过 WASAPI 采集系统音频</p></div>
-            <div class="card">
-                <h3>录音控制</h3>
-                <button class="btn btn-primary" onclick="startRecording()">开始录音</button>
-                <button class="btn btn-secondary" onclick="stopRecording()">停止录音</button>
-            </div>
-            <div class="card">
-                <h3>保存录音</h3>
-                <div class="form-group"><label>文件名</label><input type="text" id="recordFileName" placeholder="输入文件名"></div>
-                <button class="btn btn-primary" onclick="saveRecording()">保存录音</button>
-            </div>
-            <div class="card"><h3>历史 <button class="btn btn-secondary" onclick="loadRecordings()">刷新</button></h3><div id="recordingsList"></div></div>
-        </div>
-
-        <!-- 查询歌曲 -->
-        <div class="page" id="page-songs">
-            <div class="page-header"><h2>🔍 查询歌曲</h2></div>
-            <div class="card">
-                <div class="form-group">
-                    <input type="text" id="songSearch" placeholder="搜索歌曲名或歌手名..." onkeyup="if(event.key==='Enter')searchSongs()">
-                </div>
-                <button class="btn btn-primary" onclick="searchSongs()">搜索</button>
-                <button class="btn btn-secondary" onclick="document.getElementById('songSearch').value='';searchSongs()">清除</button>
-                <div id="songsList" class="song-list"></div>
-            </div>
-        </div>
-
-        <!-- 创建歌曲 -->
-        <div class="page" id="page-add-song">
-            <div class="page-header"><h2>➕ 创建歌曲</h2></div>
-            <div class="card">
-                <h3>歌曲信息</h3>
-                <div class="form-group"><label>歌曲名 *</label><input type="text" id="songTitle"></div>
-                <div class="form-group"><label>歌手</label><select id="songArtist"><option value="">-- 选择歌手 --</option></select></div>
-                <div class="form-group"><label>分类</label><input type="text" id="songCategory" placeholder="如：流行、古典"></div>
-                <div class="form-group"><label>音源类型</label>
-                    <select id="audioSourceType" onchange="toggleAudioSource()">
-                        <option value="recording">WAV录音</option>
-                        <option value="file">本地文件</option>
-                    </select>
-                </div>
-                <div class="form-group" id="recordingSelectGroup">
-                    <label>选择录音</label>
-                    <select id="recordingSession"><option value="">-- 选择录音文件 --</option></select>
-                </div>
-                <div class="form-group" id="audioFileGroup" style="display:none">
-                    <label>上传音频</label><input type="file" id="audioFile" accept="audio/*">
-                </div>
-                <button class="btn btn-primary" onclick="createSong()">创建</button>
-            </div>
-        </div>
-
-        <!-- 歌手列表 -->
-        <div class="page" id="page-artists">
-            <div class="page-header"><h2>📋 歌手列表</h2></div>
-            <div class="card">
-                <div class="form-group"><input type="text" id="searchArtist" placeholder="搜索歌手..." onkeyup="if(event.key==='Enter')loadArtists()"></div>
-                <button class="btn btn-primary" onclick="loadArtists()">搜索</button>
-                <button class="btn btn-secondary" onclick="document.getElementById('searchArtist').value='';loadArtists()">清除</button>
-                <div id="artistsList" style="margin-top:20px"></div>
-            </div>
-        </div>
-
-        <!-- 新增歌手 -->
-        <div class="page" id="page-add-artist">
-            <div class="page-header"><h2>➕ 新增歌手</h2></div>
-            <div class="card">
-                <h3>上传头像</h3>
-                <div class="form-group"><input type="file" id="avatarFile" accept="image/*" onchange="previewAvatar()"></div>
-                <div id="avatarPreview"></div>
-            </div>
-            <div class="card">
-                <h3>歌手信息</h3>
-                <div class="form-group"><label>名字 *</label><input type="text" id="artistName"></div>
-                <div class="form-group"><label>简介</label><input type="text" id="artistBio"></div>
-                <button class="btn btn-primary" onclick="addArtist()">保存</button>
-            </div>
-        </div>
+    <div class="main-content" id="content">
+        <!-- 页面内容通过 JavaScript 加载 -->
     </div>
     <script>
         const API_BASE = window.location.origin;
-
-        function toggleMenu(id) { document.getElementById(id).classList.toggle('open'); }
-
-        async function showPage(id) {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            document.getElementById('page-'+id).classList.add('active');
-            if(event && event.target) event.target.classList.add('active');
-            if(id==='songs') searchSongs();
-            if(id==='artists') loadArtists();
-            if(id==='add-song') { await loadRecordingsForSong(); await loadArtistsForSelect(); }
-            if(id==='add-artist') loadArtistsForSelect();
+        
+        function toggleMenu(id) { 
+            document.getElementById(id).classList.toggle('open'); 
         }
-
-        // 录音
-        async function startRecording() {
+        
+        async function showPage(pageName) {
+            console.log('Loading:', pageName);
+            const content = document.getElementById('content');
             try {
-                const r = await fetch(API_BASE+'/api/capture/start-recording', {method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(x=>x.json());
-                if(r.ok){ alert('已开始录音: '+r.session_id); }
-                else{ alert(r.error); }
-            } catch(e){ alert(e.message); }
-        }
-
-        async function stopRecording() {
-            try {
-                const r = await fetch(API_BASE+'/api/capture/stop-recording', {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}).then(x=>x.json());
-                if(r.ok){ alert('已停止录音'); }
-                else{ alert(r.error); }
-            } catch(e){ alert(e.message); }
-        }
-
-        async function saveRecording() {
-            const name = document.getElementById('recordFileName').value;
-            if(!name){ alert('请输入文件名'); return; }
-            try {
-                const r = await fetch(API_BASE+'/api/capture/save', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:'',file_name:name})}).then(x=>x.json());
-                if(r.ok){ alert('保存成功'); loadRecordings(); }
-                else{ alert(r.error); }
-            } catch(e){ alert(e.message); }
-        }
-
-        async function loadRecordings() {
-            try {
-                const r = await fetch(API_BASE+'/api/capture/list?limit=20').then(x=>x.json());
-                const d = document.getElementById('recordingsList');
-                if(r.sessions && r.sessions.length>0){
-                    d.innerHTML = '<table class="table"><tr><th>文件名</th><th>状态</th></tr>'+r.sessions.map(s=>'<tr><td>'+(s.file_name||'-')+'</td><td>'+s.status+'</td></tr>').join('')+'</table>';
-                } else { d.innerHTML = '<p style="color:#aaa">暂无</p>'; }
-            } catch(e){}
-        }
-
-        // 歌曲
-        function toggleAudioSource() {
-            const type = document.getElementById('audioSourceType').value;
-            document.getElementById('recordingSelectGroup').style.display = type==='recording'?'block':'none';
-            document.getElementById('audioFileGroup').style.display = type==='file'?'block':'none';
-        }
-
-        async function loadRecordingsForSong() {
-            try {
-                const r = await fetch(API_BASE+'/api/capture/recordings').then(x=>x.json());
-                const sel = document.getElementById('recordingSession');
-                sel.innerHTML = '<option value="">-- 选择录音文件 --</option>';
-                (r.recordings||[]).forEach(rec=>{
-                    sel.innerHTML += '<option value="'+rec.session_id+'">'+rec.file_name+'</option>';
-                });
-            } catch(e){}
-        }
-
-        async function loadArtistsForSelect() {
-            try {
-                const r = await fetch(API_BASE+'/api/songs/artists/list').then(x=>x.json());
-                const sel = document.getElementById('songArtist');
-                if(sel){
-                    sel.innerHTML = '<option value="">-- 选择歌手 --</option>';
-                    (r.artists||[]).forEach(a=>{
-                        sel.innerHTML += '<option value="'+a.id+'">'+a.name+'</option>';
-                    });
+                const response = await fetch('/pages/' + pageName + '.html');
+                if (!response.ok) {
+                    throw new Error('Page not found');
                 }
-            } catch(e){}
-        }
-
-        async function searchSongs() {
-            const kw = document.getElementById('songSearch').value;
-            try {
-                const r = await fetch(API_BASE+'/api/songs/list?keyword='+encodeURIComponent(kw)).then(x=>x.json());
-                const d = document.getElementById('songsList');
-                if(r.songs && r.songs.length>0){
-                    d.innerHTML = r.songs.map(s=>'<div class="song-item"><span>'+s.title+' - '+(s.artist_name||'未知')+'</span><span>'+(s.category||'')+'</span></div>').join('');
-                } else { d.innerHTML = '<p style="color:#aaa">暂无歌曲</p>'; }
-            } catch(e){}
-        }
-
-        async function createSong() {
-            const title = document.getElementById('songTitle').value;
-            if(!title){ alert('请输入歌曲名'); return; }
-            const artistId = document.getElementById('songArtist').value;
-            const category = document.getElementById('songCategory').value;
-            const sourceType = document.getElementById('audioSourceType').value;
-            
-            if(sourceType==='recording'){
-                const sessionId = document.getElementById('recordingSession').value;
-                if(!sessionId){ alert('请选择录音'); return; }
-                try {
-                    const r = await fetch(API_BASE+'/api/songs/add', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,artist_id:artistId||null,category,session_id:sessionId})}).then(x=>x.json());
-                    if(r.ok){ alert('创建成功! 歌曲ID: '+r.song_id); document.getElementById('songTitle').value=''; }
-                    else{ alert(r.error); }
-                } catch(e){ alert(e.message); }
-            }else{
-                const audioFile = document.getElementById('audioFile').files[0];
-                if(!audioFile){ alert('请选择音频文件'); return; }
-                const formData = new FormData();
-                formData.append('title', title);
-                if(artistId) formData.append('artist_id', artistId);
-                if(category) formData.append('category', category);
-                formData.append('audio_file', audioFile);
-                try {
-                    const r = await fetch(API_BASE+'/api/songs/add', {method:'POST', body:formData}).then(x=>x.json());
-                    if(r.ok){ alert('创建成功! 歌曲ID: '+r.song_id); document.getElementById('songTitle').value=''; }
-                    else{ alert(r.error); }
-                } catch(e){ alert(e.message); }
+                content.innerHTML = await response.text();
+            } catch (e) {
+                console.error(e);
+                content.innerHTML = '<p>加载失败: ' + e.message + '</p>';
             }
         }
-
-        // 歌手
-        async function loadArtists() {
-            const search = document.getElementById('searchArtist')?.value || '';
-            try {
-                const r = await fetch(API_BASE+'/api/songs/artists/list').then(x=>x.json());
-                const d = document.getElementById('artistsList');
-                let list = r.artists || [];
-                if(search) list = list.filter(a=>a.name.toLowerCase().includes(search.toLowerCase()));
-                if(list.length>0){
-                    d.innerHTML = '<div class="artist-grid">'+list.map(a=>'<div class="artist-card">'+(a.avatar?'<img src="'+a.avatar+'" class="artist-avatar">':'<div class="avatar-placeholder">👤</div>')+'<div class="artist-name">'+a.name+'</div></div>').join('')+'</div>';
-                } else { d.innerHTML = '<p style="color:#aaa">暂无歌手</p>'; }
-            } catch(e){}
-        }
-
-        function previewAvatar() {
-            const file = document.getElementById('avatarFile').files[0];
-            if(file){
-                const reader = new FileReader();
-                reader.onload = function(e){ document.getElementById('avatarPreview').innerHTML = '<img src="'+e.target.result+'" style="width:80px;height:80px;border-radius:50%;object-fit:cover">'; };
-                reader.readAsDataURL(file);
-            }
-        }
-
-        async function addArtist() {
-            const name = document.getElementById('artistName').value;
-            if(!name){ alert('请输入名字'); return; }
-            const bio = document.getElementById('artistBio').value;
-            const avatarFile = document.getElementById('avatarFile').files[0];
-            const formData = new FormData();
-            formData.append('name', name);
-            if(bio) formData.append('bio', bio);
-            if(avatarFile) formData.append('avatar', avatarFile);
-            try {
-                const r = await fetch(API_BASE+'/api/songs/artists/add', {method:'POST', body:formData}).then(x=>x.json());
-                if(r.ok){ alert('保存成功'); document.getElementById('artistName').value=''; document.getElementById('artistBio').value=''; document.getElementById('avatarPreview').innerHTML=''; }
-                else{ alert(r.error); }
-            } catch(e){ alert(e.message); }
-        }
+        
+        // 默认加载录音采集页面
+        showPage('capture');
     </script>
 </body>
 </html>

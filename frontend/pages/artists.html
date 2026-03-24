@@ -1,0 +1,48 @@
+<style>
+.page-header { margin-bottom: 30px; }
+.page-header h2 { font-size: 28px; color: #333; }
+.card { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; margin-right: 10px; }
+.btn-primary { background: #4ecdc4; color: #fff; }
+.btn-secondary { background: #95a5a6; color: #fff; }
+.form-group { margin-bottom: 16px; }
+.form-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; }
+.artist-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 20px; }
+.artist-card { background: #fff; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer; }
+.artist-card:hover { background: #f8f9fa; }
+.artist-avatar { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin: 0 auto 12px; background: #eee; }
+.avatar-placeholder { width: 80px; height: 80px; border-radius: 50%; background: #ddd; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: #888; }
+.artist-name { font-size: 16px; font-weight: bold; }
+</style>
+<div class="page-header"><h2>📋 歌手列表</h2><p>查找歌手</p></div>
+<div class="card">
+    <div class="form-group"><input type="text" id="searchArtist" placeholder="搜索歌手..." onkeyup="if(event.key==='Enter')loadArtists()"></div>
+    <button class="btn btn-primary" onclick="loadArtists()">搜索</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('searchArtist').value='';loadArtists()">清除</button>
+    <div id="artistsList" style="margin-top:20px"></div>
+</div>
+<script>
+async function loadArtists() {
+    const search = document.getElementById('searchArtist')?.value || '';
+    try {
+        const r = await fetch(API_BASE+'/api/songs/artists/list').then(x=>x.json());
+        const d = document.getElementById('artistsList');
+        let list = r.artists || [];
+        if(search) list = list.filter(a=>a.name.toLowerCase().includes(search.toLowerCase()));
+        if(list.length>0){
+            d.innerHTML = '<div class="artist-grid">'+list.map(a=>'<div class="artist-card" onclick="loadArtistDetail('+a.id+')">'+(a.avatar?'<img src="'+a.avatar+'" class="artist-avatar">':'<div class="avatar-placeholder">👤</div>')+'<div class="artist-name">'+a.name+'</div></div>').join('')+'</div>';
+        } else { d.innerHTML = '<p style="color:#aaa">暂无歌手</p>'; }
+    } catch(e){}
+}
+
+async function loadArtistDetail(id) {
+    try {
+        const r = await fetch(API_BASE+'/api/songs/artists/'+id).then(x=>x.json());
+        if(r.error){ alert(r.error); return; }
+        sessionStorage.setItem('artistDetail', JSON.stringify(r));
+        showPage('artist-detail');
+    } catch(e){ alert(e.message); }
+}
+
+loadArtists();
+</script>
