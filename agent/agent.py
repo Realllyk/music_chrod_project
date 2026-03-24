@@ -211,6 +211,20 @@ class FlaskClient:
             print(f"获取活跃会话失败: {e}")
             return None
     
+    def get_session(self, session_id):
+        """获取会话详情"""
+        try:
+            resp = requests.get(
+                f"{self.base_url}/api/capture/detail/{session_id}",
+                timeout=5
+            )
+            if resp.status_code == 200:
+                return resp.json()
+            return None
+        except Exception as e:
+            print(f"获取会话详情失败: {e}")
+            return None
+    
     def register_file(self, payload):
         """向后端注册已保存的文件"""
         try:
