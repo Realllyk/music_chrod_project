@@ -138,9 +138,14 @@ def upload_file():
     CaptureService.update_session(session_id, update_data)
     
     # 上传完成后自动创建音源
+    # 获取用户之前输入的 audio_name
+    session = CaptureService.get_session(session_id)
+    user_audio_name = session.get('audio_name') if session else None
+    final_audio_name = user_audio_name if user_audio_name else filename
+    
     AudioSourcesService.create_from_session({
         'session_id': session_id,
-        'audio_name': filename,
+        'audio_name': final_audio_name,
         'file_path': str(file_path),
         'sample_rate': 48000,
         'channels': 2

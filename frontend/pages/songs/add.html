@@ -66,10 +66,10 @@ async function createSong(){
     const category=document.getElementById('songCategory').value;
     const sourceType=document.getElementById('audioSourceType').value;
     if(sourceType==='recording'){
-        const sessionId=document.getElementById('recordingSession').value;
-        if(!sessionId){alert('请选择录音');return;}
+        const audioSourceId=document.getElementById('recordingSession').value;
+        if(!audioSourceId){alert('请选择录音');return;}
         try{
-            const r=await fetch(API_BASE+'/api/songs/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,artist_id:artistId||null,category,session_id:sessionId})}).then(x=>x.json());
+            const r=await fetch(API_BASE+'/api/songs/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,artist_id:artistId||null,category,audio_source_id:audioSourceId})}).then(x=>x.json());
             if(r.ok){alert('创建成功! 歌曲ID: '+r.song_id);document.getElementById('songTitle').value='';}
             else{alert(r.error);}
         }catch(e){alert(e.message);}
