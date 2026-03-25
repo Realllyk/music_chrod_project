@@ -80,7 +80,7 @@ class CaptureService:
         """注册文件"""
         update_data = {
             'status': CaptureStatus.RECORDED.value,
-            'file_name': file_data.get('file_name'),
+            'audio_name': file_data.get('audio_name'),
             'file_path': file_data.get('file_path'),
             'sample_rate': file_data.get('sample_rate', 0),
             'channels': file_data.get('channels', 0),

@@ -131,7 +131,7 @@ async function stopRecording(fileName){
         const r=await fetch(API_BASE+'/api/capture/stop-recording',{
             method:'PUT',
             headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({session_id:currentSessionId, file_name:fileName})
+            body:JSON.stringify({session_id:currentSessionId, audio_name:fileName})
         }).then(x=>x.json());
         if(r.ok){
             setStatus('idle');
@@ -149,7 +149,7 @@ async function loadRecordings(){
         const r=await fetch(API_BASE+'/api/capture/list?limit=20').then(x=>x.json());
         const d=document.getElementById('recordingsList');
         if(r.sessions&&r.sessions.length>0){
-            d.innerHTML='<table class="table"><tr><th>会话ID</th><th>文件名</th><th>状态</th></tr>'+r.sessions.map(s=>'<tr><td>'+s.session_id+'</td><td>'+(s.file_name||'-')+'</td><td>'+s.status+'</td></tr>').join('')+'</table>';
+            d.innerHTML='<table class="table"><tr><th>会话ID</th><th>文件名</th><th>状态</th></tr>'+r.sessions.map(s=>'<tr><td>'+s.session_id+'</td><td>'+(s.audio_name||'-')+'</td><td>'+s.status+'</td></tr>').join('')+'</table>';
         }else{d.innerHTML='<p style="color:#aaa">暂无</p>';}
     }catch(e){}
 }

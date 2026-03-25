@@ -48,7 +48,7 @@ async function loadRecordingsForSong(){
         const sel=document.getElementById('recordingSession');
         sel.innerHTML='<option value="">-- 选择录音文件 --</option>';
         (r.sources||[]).forEach(rec=>{
-            sel.innerHTML+='<option value="'+rec.id+'" data-path="'+rec.file_path+'">'+rec.file_name+'</option>';
+            sel.innerHTML+='<option value="'+rec.id+'" data-path="'+rec.file_path+'">'+rec.audio_name+'</option>';
         });
     }catch(e){console.error(e);}
 }

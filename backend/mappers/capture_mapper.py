@@ -20,7 +20,7 @@ class CaptureSessionsMapper:
             with conn.cursor() as cursor:
                 sql = """
                     INSERT INTO capture_sessions 
-                    (session_id, source, status, file_name, file_path, 
+                    (session_id, source, status, audio_name, file_path, 
                      sample_rate, channels, duration_sec, device_name, ended_at)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
@@ -28,7 +28,7 @@ class CaptureSessionsMapper:
                     session_data.get('session_id'),
                     session_data.get('source'),
                     session_data.get('status', 'ready'),
-                    session_data.get('file_name'),
+                    session_data.get('audio_name'),
                     session_data.get('file_path'),
                     session_data.get('sample_rate', 0),
                     session_data.get('channels', 0),
@@ -112,7 +112,7 @@ class CaptureSessionsMapper:
             with conn.cursor() as cursor:
                 fields = []
                 values = []
-                for key in ['status', 'file_name', 'file_path', 'duration_sec', 'ended_at']:
+                for key in ['status', 'audio_name', 'file_path', 'duration_sec', 'ended_at']:
                     if key in session_data and session_data[key] is not None:
                         fields.append(f"{key} = %s")
                         values.append(session_data[key])

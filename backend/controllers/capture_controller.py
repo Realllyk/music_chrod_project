@@ -128,19 +128,19 @@ def upload_file():
     
     file.save(str(file_path))
     
-    # 更新会话（不覆盖已有的 file_name）
+    # 更新会话（不覆盖已有的 audio_name）
     update_data = {'status': 'recorded', 'file_path': str(file_path)}
     # 如果没有已有文件名，才使用上传的文件名
     session = CaptureService.get_session(session_id)
-    if not session or not session.get('file_name'):
-        update_data['file_name'] = filename
+    if not session or not session.get('audio_name'):
+        update_data['audio_name'] = filename
     
     CaptureService.update_session(session_id, update_data)
     
     # 上传完成后自动创建音源
     AudioSourcesService.create_from_session({
         'session_id': session_id,
-        'file_name': filename,
+        'audio_name': filename,
         'file_path': str(file_path),
         'sample_rate': 48000,
         'channels': 2
@@ -186,7 +186,7 @@ def list_sessions():
             'status': s.get('status'),
             'created_at': created_at.isoformat() if created_at else None,
             'duration_sec': s.get('duration_sec'),
-            'file_name': s.get('file_name')
+            'audio_name': s.get('audio_name')
         })
     
     return jsonify({'sessions': result, 'total': total})
@@ -303,7 +303,7 @@ def stop_recording():
     """停止录音"""
     data = request.get_json() or {}
     session_id = data.get('session_id')
-    file_name = data.get('file_name')  # 接收文件名
+    audio_name = data.get('audio_name')  # 接收文件名
     
     # 如果没有指定 session_id，获取当前活跃的
     if not session_id:
@@ -316,8 +316,8 @@ def stop_recording():
     
     # 更新状态和文件名
     update_data = {'status': 'stopped'}
-    if file_name:
-        update_data['file_name'] = file_name
+    if audio_name:
+        update_data['audio_name'] = audio_name
     
     CaptureService.update_session(session_id, update_data)
     
@@ -334,7 +334,7 @@ def save_recording():
     """保存录音文件名"""
     data = request.get_json() or {}
     session_id = data.get('session_id')
-    file_name = data.get('file_name', '未命名')
+    audio_name = data.get('audio_name', '未命名')
     
     if not session_id:
         return jsonify({'error': 'session_id is required'}), 400
@@ -345,16 +345,16 @@ def save_recording():
         return jsonify({'error': 'Invalid session_id'}), 400
     
     # 添加 .wav 后缀
-    if not file_name.endswith('.wav'):
-        file_name = file_name + '.wav'
+    if not audio_name.endswith('.wav'):
+        audio_name = audio_name + '.wav'
     
     # 更新文件名
-    CaptureService.update_session(session_id, {'file_name': file_name})
+    CaptureService.update_session(session_id, {'audio_name': audio_name})
     
     return jsonify({
         'ok': True,
         'session_id': session_id,
-        'file_name': file_name,
+        'audio_name': audio_name,
         'message': '保存成功'
     })
 
@@ -370,7 +370,7 @@ def get_recordings():
         if isinstance(s, dict) and s.get('file_path'):
             recordings.append({
                 'session_id': s.get('session_id'),
-                'file_name': s.get('file_name'),
+                'audio_name': s.get('audio_name'),
                 'file_path': s.get('file_path'),
                 'duration_sec': s.get('duration_sec')
             })
@@ -404,7 +404,7 @@ def upload_wav():
     # 更新会话
     CaptureService.update_session(session_id, {
         'file_path': f"/api/uploads/recordings/{filename}",
-        'file_name': wav_file.filename,
+        'audio_name': wav_file.filename,
         'status': 'stopped'
     })
     
@@ -440,18 +440,18 @@ def delete_session(session_id):
 def update_session_info(session_id):
     """更新会话信息（文件名等）"""
     data = request.get_json() or {}
-    file_name = data.get('file_name')
+    audio_name = data.get('audio_name')
     
-    if not file_name:
-        return jsonify({'error': 'file_name is required'}), 400
+    if not audio_name:
+        return jsonify({'error': 'audio_name is required'}), 400
     
     session = CaptureService.get_session(session_id)
     if not session:
         return jsonify({'error': 'Session not found'}), 404
     
-    CaptureService.update_session(session_id, {'file_name': file_name})
+    CaptureService.update_session(session_id, {'audio_name': audio_name})
     
-    return jsonify({'ok': True, 'file_name': file_name})
+    return jsonify({'ok': True, 'audio_name': audio_name})
 
 
 @capture_controller.route('/uploads/recordings/<filename>', methods=['GET'])

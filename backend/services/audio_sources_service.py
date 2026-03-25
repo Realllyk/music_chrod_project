@@ -35,7 +35,7 @@ class AudioSourcesService:
         data = {
             'source_type': 'recording',
             'source_id': session.get('session_id'),
-            'file_name': session.get('file_name'),
+            'audio_name': session.get('audio_name'),
             'file_path': session.get('file_path'),
             'sample_rate': session.get('sample_rate'),
             'channels': session.get('channels'),
@@ -50,8 +50,8 @@ class AudioSourcesService:
                 data['file_size'] = os.path.getsize(session['file_path'])
         
         # 提取格式
-        if session.get('file_name'):
-            ext = session['file_name'].split('.')[-1].lower()
+        if session.get('audio_name'):
+            ext = session['audio_name'].split('.')[-1].lower()
             data['format'] = ext
         
         return AudioSourcesMapper.insert(data)
