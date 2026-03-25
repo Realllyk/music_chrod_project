@@ -93,3 +93,8 @@ class CaptureService:
             update_data['device_name'] = file_data['meta']['device_name']
         
         return CaptureSessionsMapper.update(session_id, update_data)
+    
+    @staticmethod
+    def delete_session(session_id):
+        """删除会话"""
+        return CaptureSessionsMapper.delete(session_id)

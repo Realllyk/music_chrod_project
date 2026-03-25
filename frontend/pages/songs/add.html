@@ -43,11 +43,14 @@ function toggleAudioSource(){
 }
 async function loadRecordingsForSong(){
     try{
-        const r=await fetch(API_BASE+'/api/capture/recordings').then(x=>x.json());
+        // 从音源表获取录音列表
+        const r=await fetch(API_BASE+'/api/audio-sources/list?status=active').then(x=>x.json());
         const sel=document.getElementById('recordingSession');
         sel.innerHTML='<option value="">-- 选择录音文件 --</option>';
-        (r.recordings||[]).forEach(rec=>{sel.innerHTML+='<option value="'+rec.session_id+'">'+rec.file_name+'</option>';});
-    }catch(e){}
+        (r.sources||[]).forEach(rec=>{
+            sel.innerHTML+='<option value="'+rec.id+'" data-path="'+rec.file_path+'">'+rec.file_name+'</option>';
+        });
+    }catch(e){console.error(e);}
 }
 async function loadArtistsForSelect(){
     try{

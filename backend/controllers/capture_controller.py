@@ -7,6 +7,7 @@ import os
 from flask import Blueprint, request, jsonify, send_file
 from pathlib import Path
 from services.capture_service import CaptureService
+from services.audio_sources_service import AudioSourcesService
 from services.songs_service import SongsService
 from transcriber import MelodyTranscriber, PolyphonicTranscriber
 
@@ -127,11 +128,22 @@ def upload_file():
     
     file.save(str(file_path))
     
-    # 更新会话
-    CaptureService.update_session(session_id, {
-        'status': 'recorded',
+    # 更新会话（不覆盖已有的 file_name）
+    update_data = {'status': 'recorded', 'file_path': str(file_path)}
+    # 如果没有已有文件名，才使用上传的文件名
+    session = CaptureService.get_session(session_id)
+    if not session or not session.get('file_name'):
+        update_data['file_name'] = filename
+    
+    CaptureService.update_session(session_id, update_data)
+    
+    # 上传完成后自动创建音源
+    AudioSourcesService.create_from_session({
+        'session_id': session_id,
         'file_name': filename,
-        'file_path': str(file_path)
+        'file_path': str(file_path),
+        'sample_rate': 48000,
+        'channels': 2
     })
     
     return jsonify({

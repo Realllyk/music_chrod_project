@@ -9,6 +9,7 @@ from .capture_controller import capture_controller
 from .health_controller import health_controller
 from .music_controller import music_controller
 from .transcribe_controller import transcribe_controller
+from .audio_sources_controller import audio_sources_controller
 
 __all__ = [
     'home_controller',
@@ -16,5 +17,6 @@ __all__ = [
     'capture_controller',
     'health_controller',
     'music_controller',
-    'transcribe_controller'
+    'transcribe_controller',
+    'audio_sources_controller'
 ]

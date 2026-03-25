@@ -82,13 +82,24 @@ def add_song():
             return jsonify({'ok': True, 'song_id': song_id, 'audio_path': audio_path})
         return jsonify({'error': 'Failed to add song'}), 500
     else:
-        # JSON 格式：支持 session_id 引用
+        # JSON 格式：支持 session_id 或 audio_source_id 引用
         data = request.get_json() or {}
         session_id = data.get('session_id')
+        audio_source_id = data.get('audio_source_id')
         
         audio_path = None
-        if session_id:
-            # 从录音会话获取文件路径
+        if audio_source_id:
+            # 从音源表获取文件路径
+            from services.audio_sources_service import AudioSourcesService
+            source = AudioSourcesService.get_audio_source(audio_source_id)
+            if source:
+                if isinstance(source, dict):
+                    audio_path = source.get('file_path')
+                else:
+                    audio_path = source[4]  # file_path 在第5列
+                data['source'] = 'recording'
+        elif session_id:
+            # 兼容旧的 session_id 方式
             from services.capture_service import CaptureService
             session = CaptureService.get_session(session_id)
             if session:

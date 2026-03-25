@@ -23,6 +23,7 @@ from controllers import (
     songs_controller,
     capture_controller,
     health_controller,
+    audio_sources_controller,
     music_controller,
     transcribe_controller
 )
@@ -63,6 +64,7 @@ app.config['CONFIG'] = config
 
 app.register_blueprint(transcribe_controller)
 app.register_blueprint(home_controller)
+app.register_blueprint(audio_sources_controller)
 app.register_blueprint(songs_controller)
 app.register_blueprint(capture_controller)
 app.register_blueprint(health_controller)
