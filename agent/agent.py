@@ -81,7 +81,8 @@ class LoopbackRecorder:
             # 获取默认的 WASAPI loopback 设备
             default_speakers = self.p.get_default_wasapi_loopback()
             
-            self.sample_rate = int(default_speakers["defaultSampleRate"])
+            # 强制使用 48000 Hz，避免采样率不匹配导致加速
+            self.sample_rate = 48000
             self.channels = int(default_speakers["maxInputChannels"])
             self.device_name = default_speakers["name"]
             

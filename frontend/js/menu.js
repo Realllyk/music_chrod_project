@@ -1,7 +1,15 @@
 // 菜单配置
 const menuItems = [
     { path: '/', label: '首页', icon: '🏠' },
-    { path: '/capture', label: '录音采集', icon: '🎙️' },
+    { 
+        path: '/capture', 
+        label: '录音', 
+        icon: '🎙️',
+        submenu: [
+            { path: '/capture', label: '录音采集' },
+            { path: '/recordings', label: '录音文件' }
+        ]
+    },
     { 
         path: '/songs', 
         label: '歌曲库', 
@@ -55,7 +63,7 @@ menuItems.forEach(item => {
     
     if (item.submenu) {
         html += '<div class="nav-item" onclick="this.classList.toggle(\'active\');this.nextElementSibling.classList.toggle(\'open\')">';
-        html += item.icon + ' ' + item.label + ' <span class="arrow">▶</span></div>';
+        html += item.icon + ' ' + item.label + ' <span class="arrow">▼</span></div>';
         html += '<div class="submenu ' + (isParentActive ? 'open' : '') + '">';
         item.submenu.forEach(sub => {
             let isActive = currentPath === sub.path;
