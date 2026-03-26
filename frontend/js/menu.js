@@ -28,7 +28,16 @@ const menuItems = [
             { path: '/artists/add', label: '新增歌手' }
         ]
     },
-    { path: '/transcribe', label: '提取', icon: '🎼' }
+    { path: '/transcribe', label: '提取', icon: '🎼' },
+    { 
+        path: '/audio-sources', 
+        label: '音源', 
+        icon: '🎧',
+        submenu: [
+            { path: '/audio-sources/upload', label: '上传' },
+            { path: '/audio-sources/list', label: '音源列表' }
+        ]
+    }
 ];
 
 // 获取当前路径
