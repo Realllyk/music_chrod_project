@@ -3,15 +3,26 @@
 处理音乐搜索、上传等 API 请求
 """
 
+import json
 import os
 import uuid
-from flask import Blueprint, request, jsonify, send_file
 from pathlib import Path
+from flask import Blueprint, request, jsonify, send_file
 from sources import SourceFactory
 from transcriber.librosa.melody import LibrosaMelodyTranscriber
 from transcriber.librosa.chord import LibrosaChordTranscriber
+from transcriber.spleeter.melody import SpleeterMelodyTranscriber
+from transcriber.spleeter.chord import SpleeterChordTranscriber
 
-# 创建 Blueprint
+# 加载配置
+_config_path = Path(__file__).parent.parent / 'config.json'
+with open(_config_path) as f:
+    _config = json.load(f)
+
+ALGORITHM_CONFIG = _config.get('transcription', {}).get('algorithm', {})
+DEFAULT_MELODY_ALGO = ALGORITHM_CONFIG.get('melody', 'librosa')
+DEFAULT_CHORD_ALGO = ALGORITHM_CONFIG.get('chord', 'librosa')
+
 music_controller = Blueprint('music', __name__, url_prefix='/api')
 
 
@@ -172,11 +183,11 @@ def transcribe_melody():
         algo = DEFAULT_MELODY_ALGO
         
         if algo == 'librosa':
-            from transcriber.librosa.melody import LibrosaMelodyTranscriber
-            transcriber = LibrosaMelodyTranscriber()
-        else:
-            from transcriber.spleeter.melody import SpleeterMelodyTranscriber
-            transcriber = SpleeterMelodyTranscriber()
+            
+            if algo == 'librosa':
+                transcriber = LibrosaMelodyTranscriber()
+            else:
+                transcriber = SpleeterMelodyTranscriber()
         
         result = transcriber.extract_melody(str(file_path))
         
@@ -217,11 +228,11 @@ def transcribe_polyphonic():
         algo = DEFAULT_CHORD_ALGO
         
         if algo == 'librosa':
-            from transcriber.librosa.chord import LibrosaChordTranscriber
-            transcriber = LibrosaChordTranscriber()
-        else:
-            from transcriber.spleeter.chord import SpleeterChordTranscriber
-            transcriber = SpleeterChordTranscriber()
+            
+            if algo == 'librosa':
+                transcriber = LibrosaChordTranscriber()
+            else:
+                transcriber = SpleeterChordTranscriber()
         
         result = transcriber.extract_chords(str(file_path))
         

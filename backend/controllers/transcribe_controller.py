@@ -3,12 +3,23 @@
 处理单旋律提取和多声部分离任务
 """
 
+import json
 import uuid
 import os
 import threading
+from pathlib import Path
 from flask import Blueprint, request, jsonify
 from services.songs_service import SongsService
 from database import get_db
+
+# 加载配置
+_config_path = Path(__file__).parent.parent / 'config.json'
+with open(_config_path) as f:
+    _config = json.load(f)
+
+ALGORITHM_CONFIG = _config.get('transcription', {}).get('algorithm', {})
+DEFAULT_MELODY_ALGO = ALGORITHM_CONFIG.get('melody', 'librosa')
+DEFAULT_CHORD_ALGO = ALGORITHM_CONFIG.get('chord', 'librosa')
 
 # 创建 Blueprint
 transcribe_controller = Blueprint('transcribe', __name__, url_prefix='/api/transcribe')
@@ -132,10 +143,14 @@ def run_transcription(task_id, song_id, mode):
                 transcriber = SpleeterChordTranscriber()
         
         # 执行转录
-        result = transcriber.transcribe(full_audio_path)
+        # 调用对应的提取方法
+        if mode == 'melody':
+            result = transcriber.extract_melody(full_audio_path)
+        else:
+            result = transcriber.extract_chords(full_audio_path)
         
         # 保存 MIDI
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         output_dir = os.path.join(base_dir, 'outputs', 'transcribe')
         os.makedirs(output_dir, exist_ok=True)
         
