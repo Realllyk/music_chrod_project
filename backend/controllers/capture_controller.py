@@ -9,7 +9,8 @@ from pathlib import Path
 from services.capture_service import CaptureService
 from services.audio_sources_service import AudioSourcesService
 from services.songs_service import SongsService
-from transcriber import MelodyTranscriber, PolyphonicTranscriber
+from transcriber.librosa.melody import LibrosaMelodyTranscriber
+from transcriber.librosa.chord import LibrosaChordTranscriber
 
 # 创建 Blueprint
 capture_controller = Blueprint('capture', __name__, url_prefix='/api/capture')
@@ -238,9 +239,9 @@ def transcribe_session():
     try:
         # 执行识别
         if mode == 'polyphonic':
-            transcriber = PolyphonicTranscriber()
+            transcriber = LibrosaChordTranscriber()
         else:
-            transcriber = MelodyTranscriber()
+            transcriber = LibrosaMelodyTranscriber()
         
         result = transcriber.transcribe(file_path)
         

@@ -112,13 +112,24 @@ def run_transcription(task_id, song_id, mode):
             update_task(task_id, 'failed', error='Audio file does not exist: ' + full_audio_path)
             return
         
-        # 执行提取
+        # 从配置读取算法
+        algo = DEFAULT_MELODY_ALGO if mode == 'melody' else DEFAULT_CHORD_ALGO
+        
+        # 根据配置选择实现类
         if mode == 'melody':
-            from transcriber import MelodyTranscriber
-            transcriber = MelodyTranscriber()
+            if algo == 'librosa':
+                from transcriber.librosa.melody import LibrosaMelodyTranscriber
+                transcriber = LibrosaMelodyTranscriber()
+            else:
+                from transcriber.spleeter.melody import SpleeterMelodyTranscriber
+                transcriber = SpleeterMelodyTranscriber()
         else:
-            from transcriber import PolyphonicTranscriber
-            transcriber = PolyphonicTranscriber()
+            if algo == 'librosa':
+                from transcriber.librosa.chord import LibrosaChordTranscriber
+                transcriber = LibrosaChordTranscriber()
+            else:
+                from transcriber.spleeter.chord import SpleeterChordTranscriber
+                transcriber = SpleeterChordTranscriber()
         
         # 执行转录
         result = transcriber.transcribe(full_audio_path)

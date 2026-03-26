@@ -422,3 +422,76 @@ class LibrosaChordTranscriber(ChordTranscriberBase):
             'harmonic_spectrogram': self.harmonic.tolist() if self.harmonic is not None else None,
             'percussive_spectrogram': self.percussive.tolist() if self.percussive is not None else None
         }
+
+
+# 和弦类型映射
+CHORD_TYPES = {
+    # 大三和弦
+    (0, 4, 7): 'C',
+    (0, 4, 7, 11): 'CMaj7',
+    (0, 4, 7, 10): 'C7',
+    (0, 4, 7, 14): 'C9',
+    # 小三和弦
+    (0, 3, 7): 'Dm',
+    (0, 3, 7, 10): 'Dm7',
+    (0, 3, 7, 11): 'DmMaj7',
+    # 其他常用和弦
+    (0, 5, 7): 'G',
+    (0, 5, 7, 10): 'G7',
+    (0, 5, 7, 11): 'GMaj7',
+    (0, 7, 12): 'G',
+    (0, 7, 14): 'G9',
+    (0, 4, 6): 'Bb',
+    (0, 3, 6): 'Bdim',
+    (0, 4, 5): 'F',
+    (0, 3, 5): 'Am',
+    (0, 4, 9): 'Em',
+    (0, 5, 9): 'B',
+}
+
+def _get_chord_name(pitches):
+    """根据音程获取和弦名称"""
+    if not pitches or len(pitches) < 2:
+        return None
+    
+    # 计算相对于根音的音程
+    root = min(pitches)
+    intervals = tuple(sorted([p - root for p in pitches if p > root]))
+    
+    # 精确匹配
+    if intervals in CHORD_TYPES:
+        return CHORD_TYPES[intervals]
+    
+    # 近似匹配
+    for chord_intervals, name in CHORD_TYPES.items():
+        if len(chord_intervals) == len(intervals):
+            diff = sum(1 for a, b in zip(chord_intervals, intervals) if abs(a - b) <= 1)
+            if diff >= len(intervals) * 0.7:
+                return name
+    
+    return 'X'
+
+def _analyze_chords(self, midi_notes):
+    """分析和弦类型"""
+    chords = []
+    
+    # 按时间窗口分组
+    window_size = 22050 * 4  # 约4秒窗口
+    
+    for i in range(0, len(midi_notes), window_size):
+        window = midi_notes[i:i+window_size]
+        if not window:
+            continue
+        
+        # 获取窗口内的音高
+        pitches = [n.get('midi') for n in window if n.get('midi')]
+        if len(pitches) >= 3:
+            chord_name = _get_chord_name(pitches)
+            if chord_name:
+                chords.append({
+                    'chord': chord_name,
+                    'start': i / self.sr,
+                    'duration': window_size / self.sr
+                })
+    
+    return chords

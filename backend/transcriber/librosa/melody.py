@@ -312,7 +312,7 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         # 创建乐谱
         s = stream.Score()
         part = stream.Part()
-        part.instrument = instrument.Flute()
+        part.instrument = instrument.fromString("piano")
         
         # 添加音符
         for note_info in self.notes:

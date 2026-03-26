@@ -8,7 +8,8 @@ import uuid
 from flask import Blueprint, request, jsonify, send_file
 from pathlib import Path
 from sources import SourceFactory
-from transcriber import MelodyTranscriber, PolyphonicTranscriber
+from transcriber.librosa.melody import LibrosaMelodyTranscriber
+from transcriber.librosa.chord import LibrosaChordTranscriber
 
 # 创建 Blueprint
 music_controller = Blueprint('music', __name__, url_prefix='/api')
@@ -167,8 +168,17 @@ def transcribe_melody():
         return jsonify({'error': 'File not found'}), 404
     
     try:
-        transcriber = MelodyTranscriber()
-        result = transcriber.transcribe(str(file_path))
+        # 从配置读取算法
+        algo = DEFAULT_MELODY_ALGO
+        
+        if algo == 'librosa':
+            from transcriber.librosa.melody import LibrosaMelodyTranscriber
+            transcriber = LibrosaMelodyTranscriber()
+        else:
+            from transcriber.spleeter.melody import SpleeterMelodyTranscriber
+            transcriber = SpleeterMelodyTranscriber()
+        
+        result = transcriber.extract_melody(str(file_path))
         
         # 保存 MIDI
         midi_filename = f"{audio_file.rsplit('.', 1)[0]}_melody.mid"
@@ -203,8 +213,17 @@ def transcribe_polyphonic():
         return jsonify({'error': 'File not found'}), 404
     
     try:
-        transcriber = PolyphonicTranscriber()
-        result = transcriber.transcribe(str(file_path))
+        # 从配置读取算法
+        algo = DEFAULT_CHORD_ALGO
+        
+        if algo == 'librosa':
+            from transcriber.librosa.chord import LibrosaChordTranscriber
+            transcriber = LibrosaChordTranscriber()
+        else:
+            from transcriber.spleeter.chord import SpleeterChordTranscriber
+            transcriber = SpleeterChordTranscriber()
+        
+        result = transcriber.extract_chords(str(file_path))
         
         # 保存 MIDI
         midi_filename = f"{audio_file.rsplit('.', 1)[0]}_polyphonic.mid"
