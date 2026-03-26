@@ -1,8 +1,21 @@
 """
-扒谱引擎模块
+旋律提取器模块
 """
 
-from .melody import MelodyTranscriber
-from .polyphonic import PolyphonicTranscriber
+from transcriber.base import (
+    TranscriberBase,
+    MelodyTranscriberBase,
+    ChordTranscriberBase,
+    AnalysisType
+)
+from transcriber.librosa.melody import LibrosaMelodyTranscriber
+from transcriber.librosa.chord import LibrosaChordTranscriber
 
-__all__ = ['MelodyTranscriber', 'PolyphonicTranscriber']
+__all__ = [
+    'TranscriberBase',
+    'MelodyTranscriberBase', 
+    'ChordTranscriberBase',
+    'AnalysisType',
+    'LibrosaMelodyTranscriber',
+    'LibrosaChordTranscriber',
+]
