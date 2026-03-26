@@ -3,7 +3,6 @@
 """
 
 import os
-import numpy as np
 import tempfile
 from pathlib import Path
 from transcriber.base import MelodyTranscriberBase, AnalysisType
@@ -24,7 +23,7 @@ class SpleeterMelodyTranscriber(MelodyTranscriberBase):
         
         # 导入 spleeter
         try:
-            import spleeter
+            from spleeter.separator import Separator
         except ImportError:
             return {
                 'notes': [],
@@ -33,17 +32,20 @@ class SpleeterMelodyTranscriber(MelodyTranscriberBase):
             }
         
         # 创建临时目录
-        temp_dir = tempfile.mkdtemp() )
+        temp_dir = tempfile.mkdtemp()
         
         try:
             # 使用 spleeter 2stems 分离
-            from spleeter.separator import Separator
-            
-            separator = Separator('spleeter:2stems') )
-            separator.separate_to_file(audio_path, temp_dir) )
+            separator = Separator('spleeter:2stems')
+            separator.separate_to_file(audio_path, temp_dir)
             
             # 获取人声文件
-            vocals_path = os.path.join(temp_dir, 'vocals.wav') )
+            basename = os.path.splitext(os.path.basename(audio_path))[0]
+            vocals_path = os.path.join(temp_dir, basename, 'vocals.wav')
+            
+            if not os.path.exists(vocals_path):
+                # 尝试其他路径格式
+                vocals_path = os.path.join(temp_dir, 'vocals.wav')
             
             if not os.path.exists(vocals_path):
                 return {
@@ -54,16 +56,16 @@ class SpleeterMelodyTranscriber(MelodyTranscriberBase):
             
             # 从人声提取旋律（使用 librosa）
             import librosa
-            y, sr = librosa.load(vocals_path, sr=self.sample_rate) )
+            y, sr = librosa.load(vocals_path, sr=self.sample_rate)
             
             # 简化：返回提取到的音频特征
             notes = []
             
             # 保存 MIDI
             output_dir = Path(__file__).parent.parent.parent.parent / 'outputs' / 'transcribe'
-            output_dir.mkdir(parents=True, exist_ok=True) )
+            output_dir.mkdir(parents=True, exist_ok=True)
             
-            midi_path = str(output_dir / 'spleeter_melody.mid') )
+            midi_path = str(output_dir / 'spleeter_melody.mid')
             
             return {
                 'notes': notes,
@@ -74,5 +76,5 @@ class SpleeterMelodyTranscriber(MelodyTranscriberBase):
             return {
                 'notes': [],
                 'midi_path': None,
-                'error': str(e) )
+                'error': str(e)
             }

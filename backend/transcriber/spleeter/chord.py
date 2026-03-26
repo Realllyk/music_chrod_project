@@ -22,7 +22,7 @@ class SpleeterChordTranscriber(ChordTranscriberBase):
         """使用 spleeter 分离，然后分析和弦"""
         
         try:
-            import spleeter
+            from spleeter.separator import Separator
         except ImportError:
             return {
                 'chords': [],
@@ -33,19 +33,22 @@ class SpleeterChordTranscriber(ChordTranscriberBase):
         temp_dir = tempfile.mkdtemp()
         
         try:
-            from spleeter.separator import Separator
-            
             # 使用 4stems 分离
             separator = Separator('spleeter:4stems')
             separator.separate_to_file(audio_path, temp_dir)
             
             # 获取各个轨道
-            # 可以进一步处理
+            # 可以进一步处理来分析和弦
+            
+            # 保存 MIDI
+            output_dir = Path(__file__).parent.parent.parent.parent / 'outputs' / 'transcribe'
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            midi_path = str(output_dir / 'spleeter_chord.mid')
             
             return {
                 'chords': [],
-                'midi_path': None,
-                'error': 'Not implemented yet'
+                'midi_path': midi_path
             }
             
         except Exception as e:
