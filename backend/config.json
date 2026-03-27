@@ -35,8 +35,8 @@
       "hpss_margin": 4.0
     },
     "algorithm": {
-      "melody": "spleeter",
-      "chord": "spleeter"
+      "melody": "librosa",
+      "chord": "librosa"
     }
   },
   "paths": {

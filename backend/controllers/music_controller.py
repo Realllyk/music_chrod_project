@@ -186,8 +186,10 @@ def transcribe_melody():
             
             if algo == 'librosa':
                 transcriber = LibrosaMelodyTranscriber()
-            else:
+            elif algo == 'spleeter':
                 transcriber = SpleeterMelodyTranscriber()
+            elif algo == 'demucs':
+                transcriber = DemucsMelodyTranscriber()
         
         result = transcriber.extract_melody(str(file_path))
         
@@ -231,8 +233,10 @@ def transcribe_polyphonic():
             
             if algo == 'librosa':
                 transcriber = LibrosaChordTranscriber()
-            else:
+            elif algo == 'spleeter':
                 transcriber = SpleeterChordTranscriber()
+            elif algo == 'demucs':
+                transcriber = DemucsChordTranscriber()
         
         result = transcriber.extract_chords(str(file_path))
         

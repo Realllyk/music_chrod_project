@@ -10,6 +10,10 @@ from transcriber.base import (
 )
 from transcriber.librosa.melody import LibrosaMelodyTranscriber
 from transcriber.librosa.chord import LibrosaChordTranscriber
+from transcriber.spleeter.melody import SpleeterMelodyTranscriber
+from transcriber.spleeter.chord import SpleeterChordTranscriber
+from transcriber.demucs.melody import DemucsMelodyTranscriber
+from transcriber.demucs.chord import DemucsChordTranscriber
 
 __all__ = [
     'TranscriberBase',
@@ -18,4 +22,8 @@ __all__ = [
     'AnalysisType',
     'LibrosaMelodyTranscriber',
     'LibrosaChordTranscriber',
+    'SpleeterMelodyTranscriber',
+    'SpleeterChordTranscriber',
+    'DemucsMelodyTranscriber',
+    'DemucsChordTranscriber',
 ]

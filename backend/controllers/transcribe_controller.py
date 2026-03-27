@@ -131,16 +131,22 @@ def run_transcription(task_id, song_id, mode):
             if algo == 'librosa':
                 from transcriber.librosa.melody import LibrosaMelodyTranscriber
                 transcriber = LibrosaMelodyTranscriber()
-            else:
+            elif algo == 'spleeter':
                 from transcriber.spleeter.melody import SpleeterMelodyTranscriber
                 transcriber = SpleeterMelodyTranscriber()
+            elif algo == 'demucs':
+                from transcriber.demucs.melody import DemucsMelodyTranscriber
+                transcriber = DemucsMelodyTranscriber()
         else:
             if algo == 'librosa':
                 from transcriber.librosa.chord import LibrosaChordTranscriber
                 transcriber = LibrosaChordTranscriber()
-            else:
+            elif algo == 'spleeter':
                 from transcriber.spleeter.chord import SpleeterChordTranscriber
                 transcriber = SpleeterChordTranscriber()
+            elif algo == 'demucs':
+                from transcriber.demucs.chord import DemucsChordTranscriber
+                transcriber = DemucsChordTranscriber()
         
         # 执行转录
         # 调用对应的提取方法
