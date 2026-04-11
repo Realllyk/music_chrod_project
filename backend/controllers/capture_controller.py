@@ -304,7 +304,7 @@ def start_recording():
     })
 
 
-@capture_controller.route('/stop-recording', methods=['PUT'])
+@capture_controller.route('/stop-recording', methods=['POST'])
 def stop_recording():
     """停止录音"""
     data = request.get_json() or {}

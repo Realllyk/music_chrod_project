@@ -23,9 +23,11 @@ from controllers import (
     songs_controller,
     capture_controller,
     health_controller,
+    artists_controller,
     audio_sources_controller,
+    transcribe_controller,
+    sources_controller,
     music_controller,
-    transcribe_controller
 )
 
 # ============================================================================
@@ -68,6 +70,8 @@ app.register_blueprint(audio_sources_controller)
 app.register_blueprint(songs_controller)
 app.register_blueprint(capture_controller)
 app.register_blueprint(health_controller)
+app.register_blueprint(artists_controller)
+app.register_blueprint(sources_controller)
 app.register_blueprint(music_controller)
 
 # ============================================================================

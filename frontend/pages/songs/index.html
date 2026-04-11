@@ -41,7 +41,7 @@ async function loadSongDetail(id){
         const r=await fetch(API_BASE+'/api/songs/'+id).then(x=>x.json());
         if(r.error){alert(r.error);return;}
         sessionStorage.setItem('songDetail',JSON.stringify(r));
-        window.location.href='/songs/detail?id='+id;
+        window.location.href='/songs/details?id='+id;
     }catch(e){alert(e.message);}
 }
 searchSongs();

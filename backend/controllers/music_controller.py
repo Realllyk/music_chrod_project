@@ -1,272 +1,93 @@
 """
 音乐 Controller
-处理音乐搜索、上传等 API 请求
+处理音乐文件上传、MIDI 下载等 API 请求
 """
 
-import json
 import os
 import uuid
 from pathlib import Path
 from flask import Blueprint, request, jsonify, send_file
-from sources import SourceFactory
-from transcriber.librosa.melody import LibrosaMelodyTranscriber
-from transcriber.librosa.chord import LibrosaChordTranscriber
-from transcriber.spleeter.melody import SpleeterMelodyTranscriber
-from transcriber.spleeter.chord import SpleeterChordTranscriber
 
-# 加载配置
-_config_path = Path(__file__).parent.parent / 'config.json'
-with open(_config_path) as f:
-    _config = json.load(f)
-
-ALGORITHM_CONFIG = _config.get('transcription', {}).get('algorithm', {})
-DEFAULT_MELODY_ALGO = ALGORITHM_CONFIG.get('melody', 'librosa')
-DEFAULT_CHORD_ALGO = ALGORITHM_CONFIG.get('chord', 'librosa')
-
-music_controller = Blueprint('music', __name__, url_prefix='/api')
+music_controller = Blueprint('music', __name__, url_prefix='/api/music')
 
 
 # ============================================================================
-# 音乐源 API
+# 音乐文件上传
 # ============================================================================
 
-@music_controller.route('/sources', methods=['GET'])
-def get_sources():
-    """获取所有可用的音乐源"""
-    sources = SourceFactory.get_available_sources()
-    return jsonify({
-        'sources': sources,
-        'current': type(SourceFactory.get_current()).__name__ if SourceFactory._current_source else None
-    })
-
-
-@music_controller.route('/sources/switch', methods=['POST'])
-def switch_source():
-    """切换音乐源"""
-    data = request.get_json() or {}
-    source_name = data.get('source_name')
-    source_config = data.get('config', {})
-    
-    try:
-        source = SourceFactory.set_current(source_name, source_config)
-        source.authenticate()
-        return jsonify({
-            'ok': True,
-            'source': source_name,
-            'message': f'Switched to {source_name}'
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-# ============================================================================
-# 搜索 API
-# ============================================================================
-
-@music_controller.route('/search', methods=['GET'])
-def search_music():
-    """搜索音乐"""
-    query = request.args.get('q', '')
-    limit = request.args.get('limit', 10, type=int)
-    
-    try:
-        source = SourceFactory.get_current()
-        results = source.search(query, limit)
-        return jsonify({
-            'results': results,
-            'total': len(results)
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-# ============================================================================
-# 文件上传 API
-# ============================================================================
-
-@music_controller.route('/music/upload', methods=['POST'])
+@music_controller.route('/upload', methods=['POST'])
 def upload_music():
-    """上传音乐文件"""
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file provided'}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'Empty filename'}), 400
-    
-    # 检查文件类型
-    allowed_ext = {'.mp3', '.wav', '.flac', '.ogg', '.m4a', '.wma'}
-    ext = Path(file.filename).suffix.lower()
-    if ext not in allowed_ext:
-        return jsonify({'error': f'Invalid file type. Allowed: {allowed_ext}'}), 400
-    
-    # 保存文件
-    from datetime import datetime
-    filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
-    upload_dir = Path(__file__).parent.parent / 'uploads'
-    upload_dir.mkdir(exist_ok=True)
+    """
+    POST /api/music/upload
+    上传音乐文件（支持 multipart/form-data）
+    """
+    audio_name = request.form.get('audio_name')
+    audio_file = request.files.get('audio_file')
+
+    if not audio_name:
+        return jsonify({'error': 'audio_name is required'}), 400
+
+    if not audio_file or audio_file.filename == '':
+        return jsonify({'error': 'audio_file is required'}), 400
+
+    # 检查文件扩展名
+    ext = audio_file.filename.rsplit('.', 1)[-1].lower() if '.' in audio_file.filename else ''
+    allowed = {'mp3', 'wav', 'flac', 'ogg', 'm4a', 'wma'}
+    if ext not in allowed:
+        return jsonify({'error': f'Unsupported format: {ext}. Allowed: {", ".join(allowed)}'}), 400
+
+    # 生成唯一文件名
+    filename = f"{uuid.uuid4().hex[:8]}_{audio_name}.{ext}"
+
+    # 保存到 uploads/music 目录
+    upload_dir = Path(__file__).parent.parent / 'uploads' / 'music'
+    upload_dir.mkdir(parents=True, exist_ok=True)
     file_path = upload_dir / filename
-    file.save(str(file_path))
-    
+    audio_file.save(str(file_path))
+
+    file_size = os.path.getsize(file_path)
+
     return jsonify({
         'ok': True,
-        'file_id': filename,
-        'file_name': file.filename,
+        'audio_name': audio_name,
+        'filename': filename,
         'file_path': str(file_path),
-        'size': os.path.getsize(file_path)
-    })
-
-
-@music_controller.route('/upload/avatar', methods=['POST'])
-def upload_avatar():
-    """上传头像"""
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file provided'}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'Empty filename'}), 400
-    
-    ext = Path(file.filename).suffix.lower()
-    if ext.lower() not in ['.jpg', '.jpeg', '.png', '.gif']:
-        return jsonify({'error': 'Invalid image format'}), 400
-    
-    filename = f"avatar_{uuid.uuid4().hex}{ext}"
-    avatar_dir = Path(__file__).parent.parent / 'uploads' / 'avatars'
-    avatar_dir.mkdir(parents=True, exist_ok=True)
-    file_path = avatar_dir / filename
-    file.save(str(file_path))
-    
-    return jsonify({
-        'ok': True,
-        'path': f"/api/uploads/avatars/{filename}",
-        'filename': filename
+        'file_size': file_size,
+        'format': ext
     })
 
 
 # ============================================================================
-# 静态文件服务
-# ============================================================================
-
-@music_controller.route('/uploads/avatars/<filename>', methods=['GET'])
-def serve_avatar(filename):
-    """服务头像文件"""
-    avatar_dir = Path(__file__).parent.parent / 'uploads' / 'avatars'
-    file_path = avatar_dir / filename
-    if file_path.exists():
-        return send_file(file_path)
-    return jsonify({'error': 'File not found'}), 404
-
-
-# ============================================================================
-# 识别 API
-# ============================================================================
-
-@music_controller.route('/transcribe/melody', methods=['POST'])
-def transcribe_melody():
-    """提取单旋律"""
-    data = request.get_json() or {}
-    audio_file = data.get('audio_file')
-    
-    if not audio_file:
-        return jsonify({'error': 'No audio_file specified'}), 400
-    
-    file_path = Path(__file__).parent.parent / 'uploads' / audio_file
-    if not file_path.exists():
-        file_path = Path(audio_file)
-    
-    if not file_path.exists():
-        return jsonify({'error': 'File not found'}), 404
-    
-    try:
-        # 从配置读取算法
-        algo = DEFAULT_MELODY_ALGO
-        
-        if algo == 'librosa':
-            
-            if algo == 'librosa':
-                transcriber = LibrosaMelodyTranscriber()
-            elif algo == 'spleeter':
-                transcriber = SpleeterMelodyTranscriber()
-            elif algo == 'demucs':
-                transcriber = DemucsMelodyTranscriber()
-        
-        result = transcriber.extract_melody(str(file_path))
-        
-        # 保存 MIDI
-        midi_filename = f"{audio_file.rsplit('.', 1)[0]}_melody.mid"
-        midi_dir = Path(__file__).parent.parent / 'outputs'
-        midi_dir.mkdir(exist_ok=True)
-        midi_path = midi_dir / midi_filename
-        transcriber.save_midi(str(midi_path))
-        
-        return jsonify({
-            'ok': True,
-            'result': result,
-            'midi_file': str(midi_path)
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@music_controller.route('/transcribe/polyphonic', methods=['POST'])
-def transcribe_polyphonic():
-    """多声部分离"""
-    data = request.get_json() or {}
-    audio_file = data.get('audio_file')
-    
-    if not audio_file:
-        return jsonify({'error': 'No audio_file specified'}), 400
-    
-    file_path = Path(__file__).parent.parent / 'uploads' / audio_file
-    if not file_path.exists():
-        file_path = Path(audio_file)
-    
-    if not file_path.exists():
-        return jsonify({'error': 'File not found'}), 404
-    
-    try:
-        # 从配置读取算法
-        algo = DEFAULT_CHORD_ALGO
-        
-        if algo == 'librosa':
-            
-            if algo == 'librosa':
-                transcriber = LibrosaChordTranscriber()
-            elif algo == 'spleeter':
-                transcriber = SpleeterChordTranscriber()
-            elif algo == 'demucs':
-                transcriber = DemucsChordTranscriber()
-        
-        result = transcriber.extract_chords(str(file_path))
-        
-        # 保存 MIDI
-        midi_filename = f"{audio_file.rsplit('.', 1)[0]}_polyphonic.mid"
-        midi_dir = Path(__file__).parent.parent / 'outputs'
-        midi_dir.mkdir(exist_ok=True)
-        midi_path = midi_dir / midi_filename
-        transcriber.save_midi(str(midi_path))
-        
-        return jsonify({
-            'ok': True,
-            'result': result,
-            'midi_file': str(midi_path)
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-# ============================================================================
-# 下载 API
+# MIDI 文件下载
 # ============================================================================
 
 @music_controller.route('/download/midi/<filename>', methods=['GET'])
 def download_midi(filename):
-    """下载 MIDI 文件"""
-    midi_dir = Path(__file__).parent.parent / 'outputs'
-    midi_path = midi_dir / filename
-    
-    if not midi_path.exists():
-        return jsonify({'error': 'File not found'}), 404
-    
-    return send_file(midi_path, as_attachment=True, download_name=filename)
+    """
+    GET /api/music/download/midi/<filename>
+    下载 MIDI 文件
+    """
+    # 安全检查：只允许 .mid 和 .midi 扩展名
+    if not filename.endswith(('.mid', '.midi')):
+        return jsonify({'error': 'Invalid file type'}), 400
+
+    # 防止路径遍历
+    filename = os.path.basename(filename)
+
+    # 查找文件：优先 outputs 目录
+    output_dir = Path(__file__).parent.parent / 'outputs'
+    file_path = output_dir / filename
+
+    if not file_path.exists():
+        # 尝试 uploads 目录
+        upload_dir = Path(__file__).parent.parent / 'uploads'
+        file_path = upload_dir / filename
+        if not file_path.exists():
+            return jsonify({'error': 'File not found'}), 404
+
+    return send_file(
+        file_path,
+        mimetype='audio/midi',
+        as_attachment=True,
+        download_name=filename
+    )

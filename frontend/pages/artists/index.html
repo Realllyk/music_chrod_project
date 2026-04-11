@@ -48,7 +48,7 @@ async function loadArtistDetail(id){
         const r=await fetch(API_BASE+'/api/songs/artists/'+id).then(x=>x.json());
         if(r.error){alert(r.error);return;}
         sessionStorage.setItem('artistDetail',JSON.stringify(r));
-        window.location.href='/artists/detail?id='+id;
+        window.location.href='/artists/details?id='+id;
     }catch(e){alert(e.message);}
 }
 loadArtists();
