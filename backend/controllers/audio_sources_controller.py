@@ -2,6 +2,7 @@
 from flask import Blueprint, jsonify, request
 from services.audio_sources_service import AudioSourcesService
 from mappers.audio_sources_mapper import AudioSourcesMapper
+from utils.aliyun_oss import upload_file
 
 audio_sources_controller = Blueprint('audio_sources', __name__, url_prefix='/api/audio-sources')
 
@@ -91,30 +92,21 @@ def upload_audio_source():
     if not audio_file or audio_file.filename == '':
         return jsonify({'error': '请选择音频文件'}), 400
     
-    # 保存文件
-    import uuid
-    from pathlib import Path
+    # 上传到阿里云 OSS
+    file_url = upload_file(audio_file, "audio-sources")
+    
+    # 获取文件大小
+    import os
+    file_size = audio_file.content_length if hasattr(audio_file, 'content_length') and audio_file.content_length else 0
     
     # 获取文件扩展名
     ext = audio_file.filename.rsplit('.', 1)[-1].lower() if '.' in audio_file.filename else 'wav'
-    filename = f"{uuid.uuid4().hex[:8]}_{audio_name}.{ext}"
-    
-    # 保存目录
-    upload_dir = Path(__file__).parent.parent / 'uploads' / 'audio-sources'
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    file_path = upload_dir / filename
-    
-    audio_file.save(str(file_path))
-    
-    # 获取文件信息
-    import os
-    file_size = os.path.getsize(file_path)
-    
+
     # 创建音源记录
     source_data = {
         'source_type': 'upload',
         'audio_name': audio_name,
-        'file_path': str(file_path),
+        'file_path': file_url,
         'file_size': file_size,
         'format': ext,
         'status': 'active'
@@ -126,5 +118,5 @@ def upload_audio_source():
         'ok': True,
         'audio_source_id': source_id,
         'audio_name': audio_name,
-        'file_path': str(file_path)
+        'file_path': file_url
     })
