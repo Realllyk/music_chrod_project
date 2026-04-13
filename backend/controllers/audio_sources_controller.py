@@ -2,7 +2,7 @@
 from flask import Blueprint, jsonify, request
 from services.audio_sources_service import AudioSourcesService
 from mappers.audio_sources_mapper import AudioSourcesMapper
-from utils.aliyun_oss import upload_file
+from utils.aliyun_oss import upload_file, list_files
 
 audio_sources_controller = Blueprint('audio_sources', __name__, url_prefix='/api/audio-sources')
 
@@ -42,6 +42,19 @@ def list_audio_sources():
         'sources': result,
         'total': total
     })
+
+
+@audio_sources_controller.route('/oss-files', methods=['GET'])
+def list_oss_audio_files():
+    """从 OSS audio-sources/ 目录列出文件，返回公网 URL"""
+    try:
+        files = list_files("audio-sources/")
+        return jsonify({
+            'files': files,
+            'total': len(files)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @audio_sources_controller.route('/<int:audio_id>', methods=['GET'])

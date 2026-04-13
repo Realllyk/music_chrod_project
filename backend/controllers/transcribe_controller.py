@@ -1,6 +1,7 @@
 """
 提取 Controller
 处理单旋律提取和多声部分离任务
+全程使用 OSS：下载音频 → 处理 → 上传结果
 """
 
 import json
@@ -11,6 +12,7 @@ from pathlib import Path
 from flask import Blueprint, request, jsonify
 from services.songs_service import SongsService
 from database import get_db
+from utils.aliyun_oss import download_file, upload_file
 
 # 加载配置
 _config_path = Path(__file__).parent.parent / 'config.json'
@@ -100,32 +102,30 @@ def get_task(task_id):
 # ============================================================================
 
 def run_transcription(task_id, song_id, mode):
-    """后台执行提取任务"""
+    """后台执行提取任务，全程使用 OSS"""
+    full_audio_path = None
+
     try:
         # 更新状态为处理中
         update_task(task_id, 'processing')
-        
+
         # 获取歌曲信息
         song = SongsService.get_song_by_id(song_id)
         if not song:
             update_task(task_id, 'failed', error='Song not found')
             return
-        
+
         audio_path = song.get('audio_path')
         if not audio_path:
             update_task(task_id, 'failed', error='Audio file not found')
             return
-        
-        # audio_path 已是完整路径，直接使用
-        full_audio_path = audio_path
-        
-        if not os.path.exists(full_audio_path):
-            update_task(task_id, 'failed', error='Audio file does not exist: ' + full_audio_path)
-            return
-        
+
+        # 直接从 OSS 下载音频（audio_path 即为 OSS object_name）
+        full_audio_path = download_file(audio_path)
+
         # 从配置读取算法
         algo = DEFAULT_MELODY_ALGO if mode == 'melody' else DEFAULT_CHORD_ALGO
-        
+
         # 根据配置选择实现类
         if mode == 'melody':
             if algo == 'librosa':
@@ -147,39 +147,49 @@ def run_transcription(task_id, song_id, mode):
             elif algo == 'demucs':
                 from transcriber.demucs.chord import DemucsChordTranscriber
                 transcriber = DemucsChordTranscriber()
-        
+
         # 执行转录
-        # 调用对应的提取方法
         if mode == 'melody':
             result = transcriber.extract_melody(full_audio_path)
         else:
             result = transcriber.extract_chords(full_audio_path)
-        
-        # 保存 MIDI
+
+        # 保存 MIDI 到本地临时目录
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         output_dir = os.path.join(base_dir, 'outputs', 'transcribe')
         os.makedirs(output_dir, exist_ok=True)
-        
+
         midi_filename = f"{song_id}_{mode}_{task_id}.mid"
         midi_path = os.path.join(output_dir, midi_filename)
-        
+
         transcriber.save_midi(midi_path)
-        
+
+        # 上传 MIDI 到 OSS
+        oss_object_name = f"transcribe/{midi_filename}"
+        result_path = upload_file(midi_path, directory="", object_name=oss_object_name)
+
         # 更新歌曲
         update_data = {}
         if mode == 'melody':
-            update_data['melody_path'] = f"/outputs/transcribe/{midi_filename}"
+            update_data['melody_path'] = result_path
         else:
-            update_data['chord_path'] = f"/outputs/transcribe/{midi_filename}"
-        
+            update_data['chord_path'] = result_path
+
         SongsService.update_song(song_id, update_data)
-        
+
         # 更新任务状态
-        update_task(task_id, 'completed', result_path=f"/outputs/transcribe/{midi_filename}")
-        
+        update_task(task_id, 'completed', result_path=result_path)
+
     except Exception as e:
         print(f"提取失败: {e}")
         update_task(task_id, 'failed', error=str(e))
+    finally:
+        # 清理临时下载的 OSS 文件
+        if full_audio_path and os.path.exists(full_audio_path):
+            try:
+                os.remove(full_audio_path)
+            except Exception:
+                pass
 
 
 # ============================================================================
