@@ -96,3 +96,8 @@ class SongsService:
     def get_analyses(song_id):
         """获取歌曲的所有分析结果"""
         return SongAnalysisMapper.find_by_song_id(song_id)
+
+    @staticmethod
+    def search_songs(keyword='', limit=20, offset=0):
+        """搜索歌曲"""
+        return SongsMapper.search(keyword, limit, offset)

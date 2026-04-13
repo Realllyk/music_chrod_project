@@ -48,7 +48,7 @@ function init(){
 async function loadArtistDetail(id){
     currentArtistDetailId=id;
     try{
-        const r=await fetch(API_BASE+'/api/songs/artists/'+id).then(x=>x.json());
+        const r=await fetch(API_BASE+'/api/artists/'+id).then(x=>x.json());
         if(r.error){alert(r.error);return;}
         document.getElementById('artistDetailId').value=r.id||'';
         document.getElementById('artistDetailName').value=r.name||'';
@@ -69,12 +69,12 @@ async function saveArtistDetail(){
         formData.append('bio',bio);
         formData.append('avatar',avatarFile);
         try{
-            const r=await fetch(API_BASE+'/api/songs/artists/'+currentArtistDetailId,{method:'PUT',body:formData}).then(x=>x.json());
+            const r=await fetch(API_BASE+'/api/artists/'+currentArtistDetailId,{method:'PUT',body:formData}).then(x=>x.json());
             if(r.ok){alert('保存成功');window.location.href='/artists';}else{alert(r.error||'保存失败');}
         }catch(e){alert(e.message);}
     }else{
         try{
-            const r=await fetch(API_BASE+'/api/songs/artists/'+currentArtistDetailId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,bio})}).then(x=>x.json());
+            const r=await fetch(API_BASE+'/api/artists/'+currentArtistDetailId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,bio})}).then(x=>x.json());
             if(r.ok){alert('保存成功');window.location.href='/artists';}else{alert(r.error||'保存失败');}
         }catch(e){alert(e.message);}
     }
@@ -82,7 +82,7 @@ async function saveArtistDetail(){
 async function deleteArtistDetail(){
     if(!confirm('确定删除这个歌手？'))return;
     try{
-        const r=await fetch(API_BASE+'/api/songs/artists/'+currentArtistDetailId,{method:'DELETE'}).then(x=>x.json());
+        const r=await fetch(API_BASE+'/api/artists/'+currentArtistDetailId,{method:'DELETE'}).then(x=>x.json());
         if(r.ok){alert('删除成功');window.location.href='/artists';}else{alert(r.error||'删除失败');}
     }catch(e){alert(e.message);}
 }

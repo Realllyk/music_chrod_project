@@ -34,7 +34,7 @@ const API_BASE = '';
 async function loadArtists(){
     const search=document.getElementById('searchArtist')?.value||'';
     try{
-        const r=await fetch(API_BASE+'/api/songs/artists/list').then(x=>x.json());
+        const r=await fetch(API_BASE+'/api/artists/list').then(x=>x.json());
         const d=document.getElementById('artistsList');
         let list=r.artists||[];
         if(search)list=list.filter(a=>a.name.toLowerCase().includes(search.toLowerCase()));
@@ -45,7 +45,7 @@ async function loadArtists(){
 }
 async function loadArtistDetail(id){
     try{
-        const r=await fetch(API_BASE+'/api/songs/artists/'+id).then(x=>x.json());
+        const r=await fetch(API_BASE+'/api/artists/'+id).then(x=>x.json());
         if(r.error){alert(r.error);return;}
         sessionStorage.setItem('artistDetail',JSON.stringify(r));
         window.location.href='/artists/details?id='+id;

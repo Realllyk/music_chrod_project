@@ -28,9 +28,9 @@ async function loadSources(){
     const d=document.getElementById('sourcesList');
     d.innerHTML='<p>加载中...</p>';
     try{
-        const r=await fetch(API_BASE+'/api/sources').then(x=>x.json());
+        const r=await fetch(API_BASE+'/api/audio-sources/list').then(x=>x.json());
         if(r.sources&&r.sources.length>0){
-            d.innerHTML=r.sources.map(s=>'<div class="source-item"><strong>'+s.name+'</strong> <span style="color:#888">'+s.type+'</span></div>').join('');
+            d.innerHTML=r.sources.map(s=>'<div class="source-item"><strong>'+s.audio_name+'</strong> <span style="color:#888">'+s.format+'</span></div>').join('');
         }else{
             d.innerHTML='<p style="color:#aaa">暂无音源</p>';
         }

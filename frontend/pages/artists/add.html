@@ -48,7 +48,7 @@ async function addArtist(){
     if(bio)formData.append('bio',bio);
     if(avatarFile)formData.append('avatar',avatarFile);
     try{
-        const r=await fetch(API_BASE+'/api/songs/artists/add',{method:'POST',body:formData}).then(x=>x.json());
+        const r=await fetch(API_BASE+'/api/artists/add',{method:'POST',body:formData}).then(x=>x.json());
         if(r.ok){alert('保存成功');document.getElementById('artistName').value='';document.getElementById('artistBio').value='';document.getElementById('avatarPreview').innerHTML='';}
         else{alert(r.error);}
     }catch(e){alert(e.message);}
