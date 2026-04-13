@@ -22,6 +22,29 @@ def _load_config():
     return config.get('aliyunoss', {})
 
 
+def get_oss_url(object_name):
+    """
+    生成 OSS 公网 URL
+
+    Args:
+        object_name: OSS 对象名称（如 'avatars/xxx.jpg', 'audio-sources/yyy.mp3'）
+
+    Returns:
+        str: OSS 公网 URL
+    """
+    config = _load_config()
+    endpoint = config.get('endpoint')
+    bucket_name = config.get('bucket')
+
+    if not endpoint or endpoint == 'your-endpoint':
+        raise ValueError("OSS endpoint 未配置，请检查 config.json")
+    if not bucket_name or bucket_name == 'your-bucket-name':
+        raise ValueError("OSS bucket 未配置，请检查 config.json")
+
+    clean_endpoint = endpoint.replace('http://', '').replace('https://', '')
+    return f"https://{bucket_name}.{clean_endpoint}/{object_name.lstrip('/')}"
+
+
 def upload_file(file_obj, directory="avatars", object_name=None):
     """
     上传文件到阿里云 OSS
@@ -40,7 +63,7 @@ def upload_file(file_obj, directory="avatars", object_name=None):
     config = _load_config()
     endpoint = config.get('endpoint')
     bucket_name = config.get('bucket')
-    
+
     # 从环境变量读取 AccessKey
     import os
     access_key_id = os.environ.get('OSS_ACCESS_KEY_ID')
@@ -77,8 +100,7 @@ def upload_file(file_obj, directory="avatars", object_name=None):
         bucket.put_object_from_file(object_name, file_obj)
 
     # 返回公网 URL
-    public_url = f"https://{bucket_name}.{endpoint.replace('http://', '').replace('https://', '')}/{object_name}"
-    return public_url
+    return get_oss_url(object_name)
 
 
 def _get_bucket():
@@ -190,7 +212,7 @@ def list_files(directory):
                 'name': obj.key.split('/')[-1],
                 'size': obj.size,
                 'last_modified': obj.last_modified,
-                'url': f"https://{bucket_name}.{endpoint.replace('http://', '').replace('https://', '')}/{obj.key}"
+                'url': get_oss_url(obj.key)
             })
 
     return files
