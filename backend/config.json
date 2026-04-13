@@ -50,7 +50,7 @@
   },
   "database": {
     "enabled": true,
-    "host": "localhost",
+    "host": "192.168.5.129",
     "port": 3306,
     "database": "music_chrod_project",
     "user": "aemeath",
