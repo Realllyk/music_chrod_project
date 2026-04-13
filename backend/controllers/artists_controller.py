@@ -3,10 +3,27 @@
 处理歌手相关的 API 请求
 """
 
-from flask import Blueprint, request, jsonify, send_file
+from flask import Blueprint, request, jsonify
 from services.artists_service import ArtistsService
 
 artists_controller = Blueprint('artists', __name__, url_prefix='/api/artists')
+
+# 允许的头像格式
+ALLOWED_AVATAR_EXTS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
+
+
+def _save_avatar_to_oss(avatar_file):
+    """
+    将头像文件上传到 OSS，返回公网 URL
+    """
+    from utils.aliyun_oss import upload_file
+
+    ext = avatar_file.filename.rsplit('.', 1)[-1].lower() if '.' in avatar_file.filename else ''
+    if ext not in ALLOWED_AVATAR_EXTS:
+        raise ValueError(f'不支持的图片格式: {ext}')
+
+    avatar_url = upload_file(avatar_file)
+    return avatar_url
 
 
 # ============================================================================
@@ -18,9 +35,9 @@ def list_artists():
     """获取歌手列表"""
     limit = request.args.get('limit', 20, type=int)
     offset = request.args.get('offset', 0, type=int)
-    
+
     artists, total = ArtistsService.get_artists(limit, offset)
-    
+
     return jsonify({
         'artists': artists,
         'total': total
@@ -44,27 +61,24 @@ def add_artist():
         name = request.form.get('name')
         bio = request.form.get('bio')
         avatar_file = request.files.get('avatar')
-        avatar_path = None
-        
-        # 处理头像上传
+        avatar_url = None
+
+        # 处理头像上传 -> OSS
         if avatar_file and avatar_file.filename:
-            import uuid
-            from pathlib import Path
-            ext = Path(avatar_file.filename).suffix.lower()
-            filename = f"avatar_{uuid.uuid4().hex}{ext}"
-            avatar_dir = Path(__file__).parent.parent / 'uploads' / 'avatars'
-            avatar_dir.mkdir(parents=True, exist_ok=True)
-            file_path = avatar_dir / filename
-            avatar_file.save(str(file_path))
-            avatar_path = f"/api/artists/avatars/{filename}"
-        
+            try:
+                avatar_url = _save_avatar_to_oss(avatar_file)
+            except ValueError as e:
+                return jsonify({'error': str(e)}), 400
+            except Exception as e:
+                return jsonify({'error': f'OSS upload failed: {e}'}), 500
+
         if not name:
             return jsonify({'error': 'name is required'}), 400
-        
+
         artist_id = ArtistsService.add_artist({
             'name': name,
             'bio': bio,
-            'avatar': avatar_path
+            'avatar': avatar_url
         })
         if artist_id:
             return jsonify({'ok': True, 'artist_id': artist_id})
@@ -84,22 +98,22 @@ def update_artist(artist_id):
         name = request.form.get('name')
         bio = request.form.get('bio')
         avatar_file = request.files.get('avatar')
-        
+
         data = {}
-        if name: data['name'] = name
-        if bio: data['bio'] = bio
-        
+        if name:
+            data['name'] = name
+        if bio:
+            data['bio'] = bio
+
+        # 头像上传 -> OSS
         if avatar_file and avatar_file.filename:
-            import uuid
-            from pathlib import Path
-            ext = Path(avatar_file.filename).suffix.lower()
-            filename = f"avatar_{uuid.uuid4().hex}{ext}"
-            avatar_dir = Path(__file__).parent.parent / 'uploads' / 'avatars'
-            avatar_dir.mkdir(parents=True, exist_ok=True)
-            file_path = avatar_dir / filename
-            avatar_file.save(str(file_path))
-            data['avatar'] = f"/api/artists/avatars/{filename}"
-        
+            try:
+                data['avatar'] = _save_avatar_to_oss(avatar_file)
+            except ValueError as e:
+                return jsonify({'error': str(e)}), 400
+            except Exception as e:
+                return jsonify({'error': f'OSS upload failed: {e}'}), 500
+
         if data and ArtistsService.update_artist(artist_id, data):
             return jsonify({'ok': True, 'message': 'Artist updated'})
         return jsonify({'error': 'Failed to update artist'}), 500
@@ -124,39 +138,19 @@ def delete_artist(artist_id):
 
 @artists_controller.route('/<int:artist_id>/avatar', methods=['PUT'])
 def update_artist_avatar(artist_id):
-    """更新歌手头像（ multipart/form-data）"""
+    """更新歌手头像（multipart/form-data，上传到 OSS）"""
     avatar_file = request.files.get('avatar')
-    
+
     if not avatar_file or not avatar_file.filename:
         return jsonify({'error': 'avatar file is required'}), 400
-    
-    # 检查文件类型
-    ext = avatar_file.filename.rsplit('.', 1)[-1].lower() if '.' in avatar_file.filename else ''
-    if ext not in ['jpg', 'jpeg', 'png', 'gif']:
-        return jsonify({'error': 'Invalid image format'}), 400
-    
-    # 保存文件
-    import uuid
-    from pathlib import Path
-    filename = f"avatar_{uuid.uuid4().hex}.{ext}"
-    avatar_dir = Path(__file__).parent.parent / 'uploads' / 'avatars'
-    avatar_dir.mkdir(parents=True, exist_ok=True)
-    file_path = avatar_dir / filename
-    avatar_file.save(str(file_path))
-    
-    # 更新数据库
-    avatar_url = f"/api/artists/avatars/{filename}"
+
+    try:
+        avatar_url = _save_avatar_to_oss(avatar_file)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': f'OSS upload failed: {e}'}), 500
+
     if ArtistsService.update_artist(artist_id, {'avatar': avatar_url}):
         return jsonify({'ok': True, 'avatar': avatar_url})
     return jsonify({'error': 'Failed to update avatar'}), 500
-
-
-@artists_controller.route('/avatars/<filename>', methods=['GET'])
-def serve_avatar(filename):
-    """服务头像文件"""
-    from pathlib import Path
-    avatar_dir = Path(__file__).parent.parent / 'uploads' / 'avatars'
-    file_path = avatar_dir / filename
-    if file_path.exists():
-        return send_file(file_path)
-    return jsonify({'error': 'File not found'}), 404

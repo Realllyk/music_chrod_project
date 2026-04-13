@@ -44,6 +44,10 @@
     "outputs": "./outputs",
     "logs": "./logs"
   },
+  "aliyunoss": {
+    "endpoint": "oss-cn-guangzhou.aliyuncs.com",
+    "bucket": "realllyka-music"
+  },
   "database": {
     "enabled": true,
     "host": "localhost",

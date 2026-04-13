@@ -58,7 +58,7 @@ body{margin:0;min-height:100vh}
 .nav-item:hover,.nav-item.active{background:rgba(78,205,196,0.2);color:#4ecdc4}
 .submenu{display:none;padding-left:0}
 .submenu.open{display:block}
-.submenu-item{padding:10px 20px;cursor:pointer;color:#888;font-size:14px}
+.submenu-item{padding:10px 20px 10px 40px;cursor:pointer;color:#888;font-size:14px}
 .submenu-item:hover,.submenu-item.active{color:#4ecdc4}
 .arrow{margin-left:auto;font-size:10px}
 .main-content{margin-left:200px;padding:20px;min-height:100vh}
