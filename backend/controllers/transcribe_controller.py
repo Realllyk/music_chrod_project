@@ -120,7 +120,7 @@ def run_transcription(task_id, song_id, mode):
             update_task(task_id, 'failed', error='Audio file not found')
             return
 
-        # 直接从 OSS 下载音频（audio_path 即为 OSS object_name）
+        # 从 OSS 下载音频
         full_audio_path = download_file(audio_path)
 
         # 从配置读取算法
