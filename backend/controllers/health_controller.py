@@ -24,14 +24,17 @@ def status():
     """系统状态"""
     from datetime import datetime
     
-    db = DatabaseConnection()
-    
+    conn = DatabaseConnection.get_connection()
+    connected = conn is not None
+    if conn:
+        conn.close()
+
     return jsonify({
         'status': 'running',
         'timestamp': datetime.now().isoformat(),
         'database': {
-            'enabled': db.config.enabled,
-            'connected': db.get_connection() is not None
+            'enabled': DatabaseConnection.config.enabled,
+            'connected': connected
         }
     })
 
@@ -39,8 +42,7 @@ def status():
 @health_controller.route('/db/test', methods=['POST'])
 def test_db():
     """测试数据库连接"""
-    data = request.get_json() or {}
-    ok, error = test_connection(data if data else None)
+    ok, error = test_connection()
     
     if ok:
         return jsonify({"ok": True, "message": "Database connected"})

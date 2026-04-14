@@ -36,13 +36,8 @@ async function searchSongs(){
         }else{d.innerHTML='<p style="color:#aaa">暂无歌曲</p>';}
     }catch(e){}
 }
-async function loadSongDetail(id){
-    try{
-        const r=await fetch(API_BASE+'/api/songs/'+id).then(x=>x.json());
-        if(r.error){alert(r.error);return;}
-        sessionStorage.setItem('songDetail',JSON.stringify(r));
-        window.location.href='/songs/details?id='+id;
-    }catch(e){alert(e.message);}
+function loadSongDetail(id){
+    window.location.href='/songs/details?id='+id;
 }
 searchSongs();
 </script>

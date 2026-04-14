@@ -52,25 +52,22 @@ class AudioSourcesMapper:
         try:
             with conn.cursor() as cursor:
                 if status:
+                    cursor.execute("SELECT COUNT(*) as total FROM audio_sources WHERE status = %s", (status,))
+                    total_row = cursor.fetchone()
+                    total = total_row['total'] if isinstance(total_row, dict) else total_row[0]
                     cursor.execute(
                         "SELECT * FROM audio_sources WHERE status = %s ORDER BY created_at DESC LIMIT %s OFFSET %s",
                         (status, limit, offset)
                     )
                 else:
+                    cursor.execute("SELECT COUNT(*) as total FROM audio_sources")
+                    total_row = cursor.fetchone()
+                    total = total_row['total'] if isinstance(total_row, dict) else total_row[0]
                     cursor.execute(
                         "SELECT * FROM audio_sources ORDER BY created_at DESC LIMIT %s OFFSET %s",
                         (limit, offset)
                     )
                 results = cursor.fetchall()
-                
-                # 转换为字典列表
-                if results and isinstance(results[0], dict):
-                    return results, len(results)
-                
-                # 如果是元组，转换为字典
-                cursor.execute("SELECT COUNT(*) FROM audio_sources" + (f" WHERE status = '{status}'" if status else ""))
-                total = cursor.fetchone()[0]
-                
                 return results, total
         except Exception as e:
             print(f"查询音源列表失败: {e}")

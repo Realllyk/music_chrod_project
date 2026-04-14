@@ -1,7 +1,6 @@
 """音源 Controller"""
 from flask import Blueprint, jsonify, request
 from services.audio_sources_service import AudioSourcesService
-from mappers.audio_sources_mapper import AudioSourcesMapper
 from utils.aliyun_oss import upload_file, list_files
 
 audio_sources_controller = Blueprint('audio_sources', __name__, url_prefix='/api/audio-sources')
@@ -86,10 +85,10 @@ def get_audio_source(audio_id):
 @audio_sources_controller.route('/<int:audio_id>', methods=['DELETE'])
 def delete_audio_source(audio_id):
     """删除音源"""
-    success = AudioSourcesService.delete_audio_source(audio_id)
+    success, error = AudioSourcesService.delete_audio_source(audio_id)
     if success:
         return jsonify({'ok': True})
-    return jsonify({'error': 'Delete failed'}), 400
+    return jsonify({'error': error or 'Delete failed'}), 400
 
 
 
@@ -125,7 +124,7 @@ def upload_audio_source():
         'status': 'active'
     }
     
-    source_id = AudioSourcesMapper.insert(source_data)
+    source_id = AudioSourcesService.create_audio_source(source_data)
     
     return jsonify({
         'ok': True,

@@ -43,13 +43,8 @@ async function loadArtists(){
         }else{d.innerHTML='<p style="color:#aaa">暂无歌手</p>';}
     }catch(e){}
 }
-async function loadArtistDetail(id){
-    try{
-        const r=await fetch(API_BASE+'/api/artists/'+id).then(x=>x.json());
-        if(r.error){alert(r.error);return;}
-        sessionStorage.setItem('artistDetail',JSON.stringify(r));
-        window.location.href='/artists/details?id='+id;
-    }catch(e){alert(e.message);}
+function loadArtistDetail(id){
+    window.location.href='/artists/details?id='+id;
 }
 loadArtists();
 </script>

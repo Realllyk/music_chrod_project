@@ -9,15 +9,6 @@ from flask import Blueprint, jsonify
 home_controller = Blueprint('home', __name__)
 
 
-@home_controller.route('/health')
-def health():
-    """健康检查"""
-    return jsonify({
-        'status': 'ok',
-        'message': 'Service is running'
-    })
-
-
 @home_controller.route('/outputs/<path:filename>', methods=['GET'])
 def serve_output(filename):
     """服务输出文件"""

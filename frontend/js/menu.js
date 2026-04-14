@@ -35,7 +35,7 @@ const menuItems = [
         icon: '🎧',
         submenu: [
             { path: '/audio-sources/upload', label: '上传' },
-            { path: '/audio-sources/list', label: '音源列表' }
+            { path: '/audio-sources', label: '音源列表' }
         ]
     }
 ];

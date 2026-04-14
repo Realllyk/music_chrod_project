@@ -37,9 +37,9 @@ curl http://localhost:5000/api/sources
 
 ### 4. 切换到本地文件源
 ```bash
-curl -X POST http://localhost:5000/api/sources/switch \
+curl -X PUT http://localhost:5000/api/sources/switch \
   -H "Content-Type: application/json" \
-  -d '{"source_name":"local_file","config":{"music_dir":"~/Music","recursive":true}}'
+  -d '{"source":"local_file","config":{"music_dir":"~/Music","recursive":true}}'
 ```
 
 ---
@@ -94,7 +94,7 @@ curl http://localhost:5000/api/download/midi/MIDI_FILENAME \
 | GET | `/api/health` | 健康检查 |
 | GET | `/api/status` | 应用状态 |
 | GET | `/api/sources` | 获取音乐源列表 |
-| POST | `/api/sources/switch` | 切换音乐源 |
+| PUT | `/api/sources/switch` | 切换音乐源 |
 | GET | `/api/search` | 搜索音乐 |
 | POST | `/api/music/upload` | 上传文件 |
 | POST | `/api/transcribe/melody` | 单旋律提取 |
@@ -135,8 +135,8 @@ print(requests.get(f'{BASE_URL}/api/health').json())
 
 # 2. 切换源
 print("2️⃣  切换到本地文件源...")
-print(requests.post(f'{BASE_URL}/api/sources/switch', json={
-    'source_name': 'local_file',
+print(requests.put(f'{BASE_URL}/api/sources/switch', json={
+    'source': 'local_file',
     'config': {'music_dir': '~/Music', 'recursive': True}
 }).json())
 
@@ -172,7 +172,7 @@ print("\n✅ 完成！")
 **本地文件：**
 ```json
 {
-  "source_name": "local_file",
+  "source": "local_file",
   "config": {
     "music_dir": "~/Music",
     "recursive": true
@@ -183,7 +183,7 @@ print("\n✅ 完成！")
 **Spotify：**
 ```json
 {
-  "source_name": "spotify",
+  "source": "spotify",
   "config": {
     "client_id": "YOUR_ID",
     "client_secret": "YOUR_SECRET"

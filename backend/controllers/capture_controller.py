@@ -8,10 +8,8 @@ from flask import Blueprint, request, jsonify, send_file
 from pathlib import Path
 from services.capture_service import CaptureService
 from services.audio_sources_service import AudioSourcesService
-from services.songs_service import SongsService
-from transcriber.librosa.melody import LibrosaMelodyTranscriber
-from transcriber.librosa.chord import LibrosaChordTranscriber
-from utils.aliyun_oss import upload_file, download_file, get_oss_url
+from services.file_service import FileService
+from utils.aliyun_oss import upload_file as upload_to_oss, download_file
 
 # 创建 Blueprint
 capture_controller = Blueprint('capture', __name__, url_prefix='/api/capture')
@@ -63,7 +61,7 @@ def get_active_session():
     return jsonify({'session_id': None, 'status': None})
 
 
-@capture_controller.route('/request-recording', methods=['POST'])
+@capture_controller.route('/request-recording', methods=['PUT'])
 def request_recording():
     """请求开始录制"""
     data = request.get_json() or {}
@@ -81,7 +79,7 @@ def request_recording():
     })
 
 
-@capture_controller.route('/register-file', methods=['POST'])
+@capture_controller.route('/register-file', methods=['PUT'])
 def register_file():
     """注册已保存的文件"""
     data = request.get_json() or {}
@@ -118,7 +116,7 @@ def upload_file():
 
     # 上传到 OSS，目录为 recordings
     try:
-        oss_url = upload_file(file, directory="recordings")
+        oss_url = upload_to_oss(file, directory="recordings")
     except Exception as e:
         return jsonify({'error': f'OSS upload failed: {str(e)}'}), 500
 
@@ -151,7 +149,7 @@ def upload_file():
     })
 
 
-@capture_controller.route('/stop', methods=['POST'])
+@capture_controller.route('/stop', methods=['PUT'])
 def stop_session():
     """停止采集会话"""
     data = request.get_json() or {}
@@ -199,84 +197,12 @@ def get_session_detail(session_id):
 
 
 # ============================================================================
-# 识别 API
-# ============================================================================
-
-@capture_controller.route('/transcribe', methods=['PUT'])
-def transcribe_session():
-    """对采集的音频进行识别"""
-    data = request.get_json() or {}
-    song_id = data.get('song_id')
-    session_id = data.get('session_id')
-    mode = data.get('mode', 'melody')
-    
-    # 获取歌曲信息
-    song = SongsService.get_song_by_id(song_id)
-    if not song:
-        # 如果没有 song_id，尝试通过 session_id 获取
-        if session_id:
-            session = CaptureService.get_session(session_id)
-            if session:
-                file_path = session.get('file_path')
-                session_id = session_id
-        else:
-            return jsonify({'error': 'Invalid song_id or session_id'}), 400
-    else:
-        file_path = song.get('audio_path')
-    
-    if not file_path or not os.path.exists(file_path):
-        return jsonify({'error': 'Audio file not found'}), 404
-    
-    try:
-        # 执行识别
-        if mode == 'polyphonic':
-            transcriber = LibrosaChordTranscriber()
-        else:
-            transcriber = LibrosaMelodyTranscriber()
-        
-        result = transcriber.transcribe(file_path)
-        
-        # 保存 MIDI
-        import uuid
-        midi_filename = f"song_{song_id}_{mode}_{uuid.uuid4().hex[:6]}.mid"
-        midi_dir = Path(__file__).parent.parent / 'outputs'
-        midi_dir.mkdir(exist_ok=True)
-        midi_path = midi_dir / midi_filename
-        transcriber.save_midi(str(midi_path))
-        
-        # 更新歌曲记录
-        update_data = {'status': 'completed'}
-        if mode == 'melody':
-            update_data['melody_path'] = str(midi_path)
-        else:
-            update_data['chord_path'] = str(midi_path)
-        
-        SongsService.update_song(song_id, update_data)
-        
-        # 添加分析结果
-        analysis_type = 'chord' if mode == 'polyphonic' else mode
-        SongsService.add_analysis(song_id, analysis_type, result, str(midi_path))
-        
-        return jsonify({
-            'ok': True,
-            'status': 'done',
-            'mode': mode,
-            'result': result,
-            'midi_file': str(midi_path),
-            'song_id': song_id
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-# ============================================================================
 # 简化后的录音接口
 # ============================================================================
 
 @capture_controller.route('/start-recording', methods=['POST'])
 def start_recording():
-    """开始录音（创建会话+请求录制）"""
+    """兼容接口：开始录音（创建会话+请求录制）。正式流程请使用 /start + /request-recording。"""
     data = request.get_json() or {}
     source = data.get('source', 'system_loopback')
     
@@ -295,9 +221,9 @@ def start_recording():
     })
 
 
-@capture_controller.route('/stop-recording', methods=['POST'])
+@capture_controller.route('/stop-recording', methods=['PUT'])
 def stop_recording():
-    """停止录音"""
+    """兼容接口：停止录音。正式流程请使用 /stop。"""
     data = request.get_json() or {}
     session_id = data.get('session_id')
     audio_name = data.get('audio_name')  # 接收文件名
@@ -326,7 +252,7 @@ def stop_recording():
     })
 
 
-@capture_controller.route('/save', methods=['POST'])
+@capture_controller.route('/save', methods=['PUT'])
 def save_recording():
     """保存录音文件名"""
     data = request.get_json() or {}
@@ -375,43 +301,6 @@ def get_recordings():
     return jsonify({'recordings': recordings})
 
 
-@capture_controller.route('/upload-wav', methods=['POST'])
-def upload_wav():
-    """上传 WAV 录音文件"""
-    session_id = request.form.get('session_id')
-    wav_file = request.files.get('file')
-    
-    if not session_id or not wav_file:
-        return jsonify({'error': 'session_id and file are required'}), 400
-    
-    # 保存文件
-    import uuid
-    from pathlib import Path
-    
-    ext = Path(wav_file.filename).suffix.lower()
-    if ext not in ['.wav', '.mp3']:
-        return jsonify({'error': 'only wav/mp3 files allowed'}), 400
-    
-    filename = f"{session_id}_{uuid.uuid4().hex[:6]}{ext}"
-    upload_dir = Path(__file__).parent.parent / 'uploads' / 'recordings'
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    file_path = upload_dir / filename
-    wav_file.save(str(file_path))
-    
-    # 更新会话
-    CaptureService.update_session(session_id, {
-        'file_path': f"/api/uploads/recordings/{filename}",
-        'audio_name': wav_file.filename,
-        'status': 'stopped'
-    })
-    
-    return jsonify({
-        'ok': True,
-        'session_id': session_id,
-        'file_path': f"/api/uploads/recordings/{filename}"
-    })
-
-
 @capture_controller.route('/sessions/<session_id>', methods=['DELETE'])
 def delete_session(session_id):
     """删除录音会话"""
@@ -419,13 +308,12 @@ def delete_session(session_id):
     if not session:
         return jsonify({'error': 'Session not found'}), 404
     
-    # 删除文件
+    # 删除文件：本地文件走本地删除，OSS URL/object key 走 OSS 删除
     file_path = session.get('file_path')
-    if file_path and os.path.exists(file_path):
-        try:
-            os.remove(file_path)
-        except:
-            pass
+    try:
+        FileService.delete_path(file_path)
+    except Exception:
+        pass
     
     # 删除数据库记录
     CaptureService.delete_session(session_id)

@@ -76,13 +76,13 @@ curl http://localhost:5000/api/sources
 
 #### 切换音乐源
 ```
-POST http://localhost:5000/api/sources/switch
+PUT http://localhost:5000/api/sources/switch
 ```
 
 **请求体（本地文件源）：**
 ```json
 {
-  "source_name": "local_file",
+  "source": "local_file",
   "config": {
     "music_dir": "~/Music",
     "recursive": true
@@ -93,7 +93,7 @@ POST http://localhost:5000/api/sources/switch
 **请求体（Spotify 源）：**
 ```json
 {
-  "source_name": "spotify",
+  "source": "spotify",
   "config": {
     "client_id": "YOUR_CLIENT_ID",
     "client_secret": "YOUR_CLIENT_SECRET"
@@ -103,10 +103,10 @@ POST http://localhost:5000/api/sources/switch
 
 **测试命令（本地文件）：**
 ```bash
-curl -X POST http://localhost:5000/api/sources/switch \
+curl -X PUT http://localhost:5000/api/sources/switch \
   -H "Content-Type: application/json" \
   -d '{
-    "source_name": "local_file",
+    "source": "local_file",
     "config": {
       "music_dir": "~/Music",
       "recursive": true
@@ -377,10 +377,10 @@ curl http://localhost:5000/api/health
 curl http://localhost:5000/api/health
 
 # 2. 切换到本地文件源
-curl -X POST http://localhost:5000/api/sources/switch \
+curl -X PUT http://localhost:5000/api/sources/switch \
   -H "Content-Type: application/json" \
   -d '{
-    "source_name": "local_file",
+    "source": "local_file",
     "config": {"music_dir": "~/Music", "recursive": true}
   }'
 
@@ -429,10 +429,10 @@ response = requests.get('http://localhost:5000/api/sources')
 print(response.json())
 
 # 切换源
-response = requests.post(
+response = requests.put(
     'http://localhost:5000/api/sources/switch',
     json={
-        'source_name': 'local_file',
+        'source': 'local_file',
         'config': {'music_dir': '~/Music', 'recursive': True}
     }
 )
@@ -446,7 +446,7 @@ print(response.json())
 | 方法 | 路由 | 说明 | 测试命令 |
 |------|------|------|---------|
 | GET | `/api/sources` | 获取源列表 | `curl http://localhost:5000/api/sources` |
-| POST | `/api/sources/switch` | 切换源 | 见上文 |
+| PUT | `/api/sources/switch` | 切换源 | 见上文 |
 | GET | `/api/search?q=xxx` | 搜索 | `curl "http://localhost:5000/api/search?q=love"` |
 | POST | `/api/music/upload` | 上传 | 见上文 |
 | POST | `/api/transcribe/melody` | 单旋律 | 见上文 |

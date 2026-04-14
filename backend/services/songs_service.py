@@ -7,6 +7,7 @@ from constants import SongStatus, AnalysisType
 from mappers.songs_mapper import SongsMapper
 from mappers.artists_mapper import ArtistsMapper
 from mappers.song_analysis_mapper import SongAnalysisMapper
+from services.file_service import FileService
 from database import DatabaseConnection
 
 
@@ -58,6 +59,18 @@ class SongsService:
     @staticmethod
     def delete_song(song_id):
         """删除歌曲"""
+        song = SongsMapper.find_by_id(song_id)
+        if not song:
+            return False
+
+        SongAnalysisMapper.delete_by_song_id(song_id)
+
+        for key in ['audio_path', 'melody_path', 'chord_path']:
+            try:
+                FileService.delete_path(song.get(key))
+            except Exception:
+                pass
+
         return SongsMapper.delete(song_id)
     
     @staticmethod

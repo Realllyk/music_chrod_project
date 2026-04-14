@@ -4,6 +4,7 @@
 """
 
 from mappers.artists_mapper import ArtistsMapper
+from mappers.songs_mapper import SongsMapper
 
 
 class ArtistsService:
@@ -12,6 +13,12 @@ class ArtistsService:
     @staticmethod
     def add_artist(artist_data):
         """添加歌手"""
+        name = (artist_data.get('name') or '').strip()
+        if not name:
+            return None
+        if ArtistsMapper.find_by_name(name):
+            raise ValueError('Artist name already exists')
+        artist_data['name'] = name
         return ArtistsMapper.insert(artist_data)
     
     @staticmethod
@@ -32,11 +39,23 @@ class ArtistsService:
     @staticmethod
     def update_artist(artist_id, artist_data):
         """更新歌手信息"""
+        name = artist_data.get('name')
+        if name is not None:
+            name = name.strip()
+            if not name:
+                return False
+            existing = ArtistsMapper.find_by_name(name)
+            if existing and existing.get('id') != artist_id:
+                raise ValueError('Artist name already exists')
+            artist_data['name'] = name
         return ArtistsMapper.update(artist_id, artist_data)
     
     @staticmethod
     def delete_artist(artist_id):
         """删除歌手"""
+        songs, _ = SongsMapper.find_all(limit=10000, offset=0)
+        if any(song.get('artist_id') == artist_id for song in songs):
+            raise ValueError('Artist is referenced by songs and cannot be deleted')
         return ArtistsMapper.delete(artist_id)
     
     @staticmethod

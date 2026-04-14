@@ -1,5 +1,7 @@
 """音源 Service"""
 from mappers.audio_sources_mapper import AudioSourcesMapper
+from mappers.songs_mapper import SongsMapper
+from services.file_service import FileService
 
 
 class AudioSourcesService:
@@ -27,7 +29,23 @@ class AudioSourcesService:
     @staticmethod
     def delete_audio_source(audio_id):
         """删除音源"""
-        return AudioSourcesMapper.delete(audio_id)
+        source = AudioSourcesMapper.find_by_id(audio_id)
+        if not source:
+            return False, 'Audio source not found'
+
+        source_path = source.get('file_path') if isinstance(source, dict) else source[4]
+
+        songs, _ = SongsMapper.find_all(limit=10000, offset=0)
+        referenced = [song for song in songs if song.get('audio_path') == source_path]
+        if referenced:
+            return False, 'Audio source is referenced by songs and cannot be deleted'
+
+        try:
+            FileService.delete_path(source_path)
+        except Exception:
+            pass
+
+        return AudioSourcesMapper.delete(audio_id), None
     
     @staticmethod
     def create_from_session(session):
@@ -43,11 +61,9 @@ class AudioSourcesService:
             'status': 'active'
         }
         
-        # 尝试获取文件大小
-        if session.get('file_path'):
-            import os
-            if os.path.exists(session['file_path']):
-                data['file_size'] = os.path.getsize(session['file_path'])
+        # 不再依赖本地路径计算 OSS 文件大小；上传后由调用方或异步元数据解析补全
+        if session.get('file_size') is not None:
+            data['file_size'] = session.get('file_size')
         
         # 提取格式
         if session.get('audio_name'):

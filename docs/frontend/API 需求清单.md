@@ -99,7 +99,7 @@
 - **已有/缺失**：**需新增**
 
 #### 2.3.2 停止录音
-- **端点**：`POST /api/capture/stop-recording`
+- **端点**：`PUT /api/capture/stop-recording`
 - **参数**：`{session_id, file_name?}`
 - **响应**：停止结果
 - **已有/缺失**：**需新增**
@@ -176,7 +176,7 @@
 - **状态**：✅ **已有**
 
 #### 2.6.4 切换音乐源
-- **端点**：`POST /api/sources/switch`
+- **端点**：`PUT /api/sources/switch`
 - **状态**：✅ **已有**
 
 #### 2.6.5 搜索音乐
@@ -211,7 +211,7 @@
 | 1 | 通用 | `/api/health` | GET | ✅ 已有 |
 | 2 | 通用 | `/api/status` | GET | ✅ 已有 |
 | 3 | 通用 | `/api/sources` | GET | ✅ 已有 |
-| 4 | 通用 | `/api/sources/switch` | POST | ✅ 已有 |
+| 4 | 通用 | `/api/sources/switch` | PUT | ✅ 已有 |
 | 5 | 通用 | `/api/search` | GET | ✅ 已有 |
 | 6 | 通用 | `/api/music/upload` | POST | ✅ 已有 |
 | 7 | 通用 | `/api/transcribe/melody` | POST | ⚠️ 已有（前端未用，旧设计） |
@@ -228,7 +228,7 @@
 | 18 | 歌手 | `/api/songs/artists/{id}` | PUT | ❌ **需新增** |
 | 19 | 歌手 | `/api/songs/artists/{id}` | DELETE | ❌ **需新增** |
 | 20 | 录音 | `/api/capture/start-recording` | POST | ❌ **需新增** |
-| 21 | 录音 | `/api/capture/stop-recording` | POST | ❌ **需新增** |
+| 21 | 录音 | `/api/capture/stop-recording` | PUT | ❌ **需新增** |
 | 22 | 录音 | `/api/capture/list` | GET | ❌ **需新增** |
 | 23 | 录音 | `/api/capture/sessions/{id}` | PUT | ❌ **需新增** |
 | 24 | 录音 | `/api/capture/sessions/{id}` | DELETE | ❌ **需新增** |

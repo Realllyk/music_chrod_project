@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 from flask import Blueprint, request, jsonify, send_file
 from utils.aliyun_oss import upload_file, download_file, list_files, get_oss_url
+from services.file_service import FileService
 
 music_controller = Blueprint('music', __name__, url_prefix='/api/music')
 
@@ -69,9 +70,11 @@ def download_midi(filename):
     filename = os.path.basename(filename)
 
     try:
-        # 尝试从 OSS 下载 outputs/ 目录下的文件
-        object_name = f"outputs/{filename}"
-        local_path = download_file(object_name)
+        # 统一从当前提取结果目录 transcribe/ 获取；兼容旧 outputs/
+        try:
+            local_path = download_file(f"transcribe/{filename}")
+        except Exception:
+            local_path = download_file(f"outputs/{filename}")
         return send_file(
             local_path,
             mimetype='audio/midi',

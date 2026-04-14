@@ -51,10 +51,10 @@ def list_sources():
     })
 
 
-@sources_controller.route('/switch', methods=['POST'])
+@sources_controller.route('/switch', methods=['PUT'])
 def switch_source():
     """
-    POST /api/sources/switch
+    PUT /api/sources/switch
     切换当前音乐源
     """
     from sources import SourceFactory
@@ -108,8 +108,8 @@ def switch_source():
 @sources_controller.route('/search', methods=['GET'])
 def search_music():
     """
-    GET /api/search
-    搜索音乐（使用当前激活的音乐源）
+    GET /api/sources/search
+    搜索音乐（使用当前激活的音乐提供方）
     """
     from sources import SourceFactory
 

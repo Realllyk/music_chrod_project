@@ -22,6 +22,7 @@ with open(_config_path) as f:
 ALGORITHM_CONFIG = _config.get('transcription', {}).get('algorithm', {})
 DEFAULT_MELODY_ALGO = ALGORITHM_CONFIG.get('melody', 'librosa')
 DEFAULT_CHORD_ALGO = ALGORITHM_CONFIG.get('chord', 'librosa')
+ALLOWED_ALGOS = {'librosa', 'spleeter', 'demucs'}
 
 # 创建 Blueprint
 transcribe_controller = Blueprint('transcribe', __name__, url_prefix='/api/transcribe')
@@ -101,6 +102,21 @@ def get_task(task_id):
 # 后台处理线程
 # ============================================================================
 
+def _serialize_task(task):
+    if not task:
+        return None
+    return {
+        'task_id': task.get('task_id'),
+        'song_id': task.get('song_id'),
+        'mode': task.get('mode'),
+        'status': task.get('status'),
+        'result_path': task.get('result_path'),
+        'error': task.get('error'),
+        'created_at': task.get('created_at').isoformat() if task.get('created_at') else None,
+        'updated_at': task.get('updated_at').isoformat() if task.get('updated_at') else None,
+    }
+
+
 def run_transcription(task_id, song_id, mode):
     """后台执行提取任务，全程使用 OSS"""
     full_audio_path = None
@@ -108,6 +124,7 @@ def run_transcription(task_id, song_id, mode):
     try:
         # 更新状态为处理中
         update_task(task_id, 'processing')
+        SongsService.update_status(song_id, 'processing')
 
         # 获取歌曲信息
         song = SongsService.get_song_by_id(song_id)
@@ -125,6 +142,8 @@ def run_transcription(task_id, song_id, mode):
 
         # 从配置读取算法
         algo = DEFAULT_MELODY_ALGO if mode == 'melody' else DEFAULT_CHORD_ALGO
+        if algo not in ALLOWED_ALGOS:
+            raise ValueError(f'Unsupported transcription algorithm: {algo}')
 
         # 根据配置选择实现类
         if mode == 'melody':
@@ -175,6 +194,7 @@ def run_transcription(task_id, song_id, mode):
         else:
             update_data['chord_path'] = result_path
 
+        update_data['status'] = 'completed'
         SongsService.update_song(song_id, update_data)
 
         # 更新任务状态
@@ -182,6 +202,7 @@ def run_transcription(task_id, song_id, mode):
 
     except Exception as e:
         print(f"提取失败: {e}")
+        SongsService.update_status(song_id, 'failed')
         update_task(task_id, 'failed', error=str(e))
     finally:
         # 清理临时下载的 OSS 文件
@@ -234,14 +255,7 @@ def get_task_status(task_id):
     if not task:
         return jsonify({'error': 'Task not found'}), 404
     
-    return jsonify({
-        'task_id': task['task_id'],
-        'song_id': task['song_id'],
-        'mode': task['mode'],
-        'status': task['status'],
-        'result_path': task.get('result_path'),
-        'error': task.get('error')
-    })
+    return jsonify(_serialize_task(task))
 
 
 @transcribe_controller.route('/song/<song_id>', methods=['GET'])
@@ -258,6 +272,6 @@ def get_song_tasks(song_id):
                 (song_id,)
             )
             tasks = cursor.fetchall()
-        return jsonify({'tasks': tasks})
+        return jsonify({'tasks': [_serialize_task(task) for task in tasks]})
     except Exception as e:
         return jsonify({'tasks': [], 'error': str(e)})

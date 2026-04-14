@@ -79,6 +79,8 @@ def get_db():
 
 class DatabaseConnection:
     """兼容类"""
+
+    config = _config
     
     @staticmethod
     def get_connection():
@@ -90,5 +92,5 @@ def test_connection():
     conn = get_db()
     if conn:
         conn.close()
-        return True
-    return False
+        return True, None
+    return False, 'Database connection failed'

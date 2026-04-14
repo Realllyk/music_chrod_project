@@ -229,7 +229,7 @@ class FlaskClient:
     def register_file(self, payload):
         """向后端注册已保存的文件"""
         try:
-            resp = requests.post(
+            resp = requests.put(
                 f"{self.base_url}/api/capture/register-file",
                 json=payload,
                 timeout=10

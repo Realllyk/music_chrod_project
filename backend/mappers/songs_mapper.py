@@ -165,7 +165,7 @@ class SongsMapper:
             with conn.cursor() as cursor:
                 fields = []
                 values = []
-                for key in ['title', 'artist_id', 'category', 'duration', 'melody_path', 'chord_path', 'status']:
+                for key in ['title', 'artist_id', 'category', 'duration', 'source', 'source_id', 'audio_path', 'session_id', 'melody_path', 'chord_path', 'status']:
                     if key in song_data and song_data[key] is not None:
                         fields.append(f"{key} = %s")
                         values.append(song_data[key])

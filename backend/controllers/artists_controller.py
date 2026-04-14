@@ -75,17 +75,23 @@ def add_artist():
         if not name:
             return jsonify({'error': 'name is required'}), 400
 
-        artist_id = ArtistsService.add_artist({
-            'name': name,
-            'bio': bio,
-            'avatar': avatar_url
-        })
+        try:
+            artist_id = ArtistsService.add_artist({
+                'name': name,
+                'bio': bio,
+                'avatar': avatar_url
+            })
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 409
         if artist_id:
             return jsonify({'ok': True, 'artist_id': artist_id})
         return jsonify({'error': 'Failed to add artist'}), 500
     else:
         data = request.get_json() or {}
-        artist_id = ArtistsService.add_artist(data)
+        try:
+            artist_id = ArtistsService.add_artist(data)
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 409
         if artist_id:
             return jsonify({'ok': True, 'artist_id': artist_id})
         return jsonify({'error': 'Failed to add artist'}), 500
@@ -114,21 +120,30 @@ def update_artist(artist_id):
             except Exception as e:
                 return jsonify({'error': f'OSS upload failed: {e}'}), 500
 
-        if data and ArtistsService.update_artist(artist_id, data):
-            return jsonify({'ok': True, 'message': 'Artist updated'})
+        try:
+            if data and ArtistsService.update_artist(artist_id, data):
+                return jsonify({'ok': True, 'message': 'Artist updated'})
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 409
         return jsonify({'error': 'Failed to update artist'}), 500
     else:
         data = request.get_json() or {}
-        if ArtistsService.update_artist(artist_id, data):
-            return jsonify({'ok': True, 'message': 'Artist updated'})
+        try:
+            if ArtistsService.update_artist(artist_id, data):
+                return jsonify({'ok': True, 'message': 'Artist updated'})
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 409
         return jsonify({'error': 'Failed to update artist'}), 500
 
 
 @artists_controller.route('/<int:artist_id>', methods=['DELETE'])
 def delete_artist(artist_id):
     """删除歌手"""
-    if ArtistsService.delete_artist(artist_id):
-        return jsonify({'ok': True, 'message': 'Artist deleted'})
+    try:
+        if ArtistsService.delete_artist(artist_id):
+            return jsonify({'ok': True, 'message': 'Artist deleted'})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 409
     return jsonify({'error': 'Failed to delete artist'}), 500
 
 

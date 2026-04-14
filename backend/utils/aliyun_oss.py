@@ -168,6 +168,34 @@ def file_exists(object_name):
     return bucket.object_exists(object_name)
 
 
+def extract_object_name(path_or_url):
+    """从 OSS URL / object key 中提取 object key。"""
+    if not path_or_url:
+        return None
+
+    value = str(path_or_url).strip()
+    if not value:
+        return None
+
+    if value.startswith('http://') or value.startswith('https://'):
+        from urllib.parse import urlparse
+        parsed = urlparse(value)
+        return parsed.path.lstrip('/') if parsed.path else None
+
+    return value.lstrip('/')
+
+
+def delete_file(path_or_url):
+    """删除 OSS 文件；允许传 OSS URL 或 object key。"""
+    object_name = extract_object_name(path_or_url)
+    if not object_name:
+        return False
+
+    bucket, _, _ = _get_bucket()
+    bucket.delete_object(object_name)
+    return True
+
+
 def list_files(directory):
     """
     列出 OSS 目录下的文件

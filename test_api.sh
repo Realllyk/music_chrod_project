@@ -38,7 +38,7 @@ echo ""
 
 # 4. 切换到本地文件源
 echo -e "${COLORS_BLUE}4️⃣  切换到本地文件源...${COLORS_NC}"
-curl -s -X POST "$BASE_URL/api/sources/switch" \
+curl -s -X PUT "$BASE_URL/api/sources/switch" \
   -H "Content-Type: application/json" \
   -d '{
     "source_name": "local_file",

@@ -3,11 +3,37 @@
 处理歌曲相关的 API 请求
 """
 
-from flask import Blueprint, request, jsonify, send_file
+from flask import Blueprint, request, jsonify, send_file, redirect
 from services.songs_service import SongsService
+from services.file_service import FileService
 from utils.aliyun_oss import upload_file, get_oss_url
 
 songs_controller = Blueprint('songs', __name__, url_prefix='/api/songs')
+
+
+def _serialize_song(song):
+    if not song:
+        return None
+    return {
+        'id': song.get('id'),
+        'title': song.get('title'),
+        'artist_id': song.get('artist_id'),
+        'artist_name': song.get('artist_name'),
+        'category': song.get('category'),
+        'duration': song.get('duration'),
+        'source': song.get('source'),
+        'source_id': song.get('source_id'),
+        'session_id': song.get('session_id'),
+        'audio_path': song.get('audio_path'),
+        'audio_url': FileService.resolve_public_url(song.get('audio_path')) if song.get('audio_path') else None,
+        'melody_path': song.get('melody_path'),
+        'melody_url': FileService.resolve_public_url(song.get('melody_path')) if song.get('melody_path') else None,
+        'chord_path': song.get('chord_path'),
+        'chord_url': FileService.resolve_public_url(song.get('chord_path')) if song.get('chord_path') else None,
+        'status': song.get('status'),
+        'created_at': song.get('created_at').isoformat() if song.get('created_at') else None,
+        'updated_at': song.get('updated_at').isoformat() if song.get('updated_at') else None,
+    }
 
 
 # ============================================================================
@@ -27,7 +53,7 @@ def list_songs():
         songs, total = SongsService.get_songs(limit, offset)
     
     return jsonify({
-        'songs': songs,
+        'songs': [_serialize_song(song) for song in songs],
         'total': total
     })
 
@@ -37,7 +63,7 @@ def get_song(song_id):
     """获取单个歌曲"""
     song = SongsService.get_song_by_id(song_id)
     if song:
-        return jsonify(song)
+        return jsonify(_serialize_song(song))
     return jsonify({'error': 'Song not found'}), 404
 
 
@@ -80,6 +106,9 @@ def add_song():
         data = request.get_json() or {}
         session_id = data.get('session_id')
         audio_source_id = data.get('audio_source_id')
+
+        if bool(session_id) == bool(audio_source_id):
+            return jsonify({'error': 'Exactly one of session_id or audio_source_id is required for JSON create mode'}), 400
         
         audio_path = None
         if audio_source_id:
@@ -134,25 +163,17 @@ def delete_song(song_id):
 
 @songs_controller.route("/uploads/audio/<filename>", methods=["GET"])
 def serve_audio(filename):
-    """服务音频文件（支持 OSS URL 重定向或本地文件）"""
-    from pathlib import Path
-    from utils.aliyun_oss import download_file
+    """兼容层：服务歌曲音频文件。正式消费应直接使用 songs.audio_url。"""
+    song = SongsService.get_song_by_id(request.args.get('song_id', type=int)) if request.args.get('song_id') else None
+    if song and song.get('audio_path'):
+        return redirect(FileService.resolve_public_url(song.get('audio_path')))
 
-    # 如果 filename 看起来是完整 OSS URL，直接重定向
     if filename.startswith('http://') or filename.startswith('https://'):
-        from flask import redirect
         return redirect(filename)
 
-    # 先尝试本地
-    audio_dir = Path(__file__).parent.parent / "uploads" / "audio"
-    file_path = audio_dir / filename
-    if file_path.exists():
-        return send_file(file_path)
-
-    # 再尝试从 OSS 下载
+    audio_path = f"songs/{filename}"
     try:
-        object_name = f"songs/{filename}"
-        local_path = download_file(object_name)
+        local_path = FileService.fetch_local_file(audio_path)
         return send_file(local_path)
     except Exception:
         return jsonify({"error": "File not found"}), 404

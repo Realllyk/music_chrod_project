@@ -449,7 +449,7 @@ sess_20260323_143025.json
 
 ### 11.3 上报已保存音频文件
 
-`POST /api/capture/register-file`
+`PUT /api/capture/register-file`
 
 请求：
 
@@ -503,7 +503,7 @@ sess_20260323_143025.json
 
 ### 11.5 结束采集会话
 
-`POST /api/capture/stop`
+`PUT /api/capture/stop`
 
 请求：
 
