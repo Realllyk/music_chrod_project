@@ -20,6 +20,12 @@
 # transcription.algorithm.melody or transcription.algorithm.chord away from
 # "librosa".
 
+# Core utilities
+setuptools>=68
+wheel>=0.42
+
+# Web API
+
 # Web API
 Flask==2.3.3
 Flask-Cors==4.0.0
