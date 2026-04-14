@@ -1,7 +1,7 @@
 """音源 Service"""
 from mappers.audio_sources_mapper import AudioSourcesMapper
 from mappers.songs_mapper import SongsMapper
-from services.file_service import FileService
+from utils.aliyun_oss import delete_file
 
 
 class AudioSourcesService:
@@ -17,9 +17,9 @@ class AudioSourcesService:
         return AudioSourcesMapper.find_by_id(audio_id)
     
     @staticmethod
-    def list_audio_sources(limit=100, offset=0, status='active'):
-        """列出音源"""
-        return AudioSourcesMapper.find_all(limit, offset, status)
+    def list_audio_sources(limit=100, offset=0):
+        """列出音源（不按状态过滤）"""
+        return AudioSourcesMapper.find_all(limit, offset)
     
     @staticmethod
     def update_audio_source(audio_id, data):
@@ -40,10 +40,7 @@ class AudioSourcesService:
         if referenced:
             return False, 'Audio source is referenced by songs and cannot be deleted'
 
-        try:
-            FileService.delete_path(source_path)
-        except Exception:
-            pass
+        delete_file(source_path)
 
         return AudioSourcesMapper.delete(audio_id), None
     

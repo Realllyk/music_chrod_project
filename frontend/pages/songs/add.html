@@ -44,7 +44,7 @@ function toggleAudioSource(){
 async function loadRecordingsForSong(){
     try{
         // 从音源表获取录音列表
-        const r=await fetch(API_BASE+'/api/audio-sources/list?status=active').then(x=>x.json());
+        const r=await fetch(API_BASE+'/api/audio-sources/list').then(x=>x.json());
         const sel=document.getElementById('recordingSession');
         sel.innerHTML='<option value="">-- 选择录音文件 --</option>';
         (r.sources||[]).forEach(rec=>{

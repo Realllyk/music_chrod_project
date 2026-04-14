@@ -8,12 +8,11 @@ audio_sources_controller = Blueprint('audio_sources', __name__, url_prefix='/api
 
 @audio_sources_controller.route('/list', methods=['GET'])
 def list_audio_sources():
-    """获取音源列表"""
+    """获取音源列表（不按状态过滤）"""
     limit = int(request.args.get('limit', 100))
     offset = int(request.args.get('offset', 0))
-    status = request.args.get('status', 'active')
-    
-    sources, total = AudioSourcesService.list_audio_sources(limit, offset, status)
+
+    sources, total = AudioSourcesService.list_audio_sources(limit, offset)
     
     # 转换为字典列表
     result = []

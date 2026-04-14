@@ -43,30 +43,21 @@ class AudioSourcesMapper:
             return None
     
     @staticmethod
-    def find_all(limit=100, offset=0, status=None):
-        """查询所有音源"""
+    def find_all(limit=100, offset=0):
+        """查询所有音源（不按状态过滤）"""
         conn = get_db()
         if not conn:
             return [], 0
         
         try:
             with conn.cursor() as cursor:
-                if status:
-                    cursor.execute("SELECT COUNT(*) as total FROM audio_sources WHERE status = %s", (status,))
-                    total_row = cursor.fetchone()
-                    total = total_row['total'] if isinstance(total_row, dict) else total_row[0]
-                    cursor.execute(
-                        "SELECT * FROM audio_sources WHERE status = %s ORDER BY created_at DESC LIMIT %s OFFSET %s",
-                        (status, limit, offset)
-                    )
-                else:
-                    cursor.execute("SELECT COUNT(*) as total FROM audio_sources")
-                    total_row = cursor.fetchone()
-                    total = total_row['total'] if isinstance(total_row, dict) else total_row[0]
-                    cursor.execute(
-                        "SELECT * FROM audio_sources ORDER BY created_at DESC LIMIT %s OFFSET %s",
-                        (limit, offset)
-                    )
+                cursor.execute("SELECT COUNT(*) as total FROM audio_sources")
+                total_row = cursor.fetchone()
+                total = total_row['total'] if isinstance(total_row, dict) else total_row[0]
+                cursor.execute(
+                    "SELECT * FROM audio_sources ORDER BY created_at DESC LIMIT %s OFFSET %s",
+                    (limit, offset)
+                )
                 results = cursor.fetchall()
                 return results, total
         except Exception as e:
@@ -102,14 +93,14 @@ class AudioSourcesMapper:
     
     @staticmethod
     def delete(audio_id):
-        """删除音源"""
+        """物理删除音源"""
         conn = get_db()
         if not conn:
             return False
         
         try:
             with conn.cursor() as cursor:
-                cursor.execute("UPDATE audio_sources SET status='deleted' WHERE id = %s", (audio_id,))
+                cursor.execute("DELETE FROM audio_sources WHERE id = %s", (audio_id,))
                 conn.commit()
                 return cursor.rowcount > 0
         except Exception as e:
