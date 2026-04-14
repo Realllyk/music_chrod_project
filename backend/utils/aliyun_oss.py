@@ -130,16 +130,22 @@ def _get_bucket():
     return bucket, bucket_name, endpoint
 
 
-def download_file(object_name):
+def download_file(path_or_url):
     """
     从 OSS 下载文件到本地临时目录
 
     Args:
-        object_name: OSS 存储路径（相对路径），如 "audio-sources/song.mp3"
+        path_or_url: OSS 存储路径或公网 URL，如
+            "audio-sources/song.mp3"
+            "https://bucket.endpoint/audio-sources/song.mp3"
 
     Returns:
         str: 本地文件路径
     """
+    object_name = extract_object_name(path_or_url)
+    if not object_name:
+        raise ValueError("无效的 OSS 文件路径")
+
     bucket, bucket_name, endpoint = _get_bucket()
 
     # 下载到 uploads/oss_cache/ 下
@@ -154,16 +160,20 @@ def download_file(object_name):
     return str(local_path)
 
 
-def file_exists(object_name):
+def file_exists(path_or_url):
     """
     检查 OSS 文件是否存在
 
     Args:
-        object_name: OSS 存储路径（相对路径）
+        path_or_url: OSS 存储路径或公网 URL
 
     Returns:
         bool: 文件是否存在
     """
+    object_name = extract_object_name(path_or_url)
+    if not object_name:
+        return False
+
     bucket, _, _ = _get_bucket()
     return bucket.object_exists(object_name)
 
