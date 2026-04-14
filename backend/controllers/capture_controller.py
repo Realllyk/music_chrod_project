@@ -11,6 +11,7 @@ from services.audio_sources_service import AudioSourcesService
 from services.songs_service import SongsService
 from transcriber.librosa.melody import LibrosaMelodyTranscriber
 from transcriber.librosa.chord import LibrosaChordTranscriber
+from utils.aliyun_oss import upload_file, download_file, get_oss_url
 
 # 创建 Blueprint
 capture_controller = Blueprint('capture', __name__, url_prefix='/api/capture')
@@ -102,61 +103,51 @@ def register_file():
 
 @capture_controller.route('/upload-file', methods=['POST'])
 def upload_file():
-    """上传 WAV 文件"""
+    """上传 WAV 文件到 OSS"""
     session_id = request.form.get('session_id')
-    
+
     if not session_id:
         return jsonify({'error': 'Invalid session_id'}), 400
-    
+
     if 'audio_file' not in request.files:
         return jsonify({'error': 'No audio file provided'}), 400
-    
+
     file = request.files['audio_file']
     if file.filename == '':
         return jsonify({'error': 'Empty filename'}), 400
-    
-    # 保存文件到 backend 自己的目录
-    from datetime import datetime
-    import uuid
-    date_str = datetime.now().strftime("%Y%m%d")
-    dest_dir = Path(__file__).parent.parent / 'uploads' / 'recordings' / date_str
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    
-    # 使用原始文件名或生成唯一文件名
-    original_name = file.filename or f"{session_id}.wav"
-    filename = f"{uuid.uuid4().hex[:8]}_{original_name}"
-    file_path = dest_dir / filename
-    
-    file.save(str(file_path))
-    
-    # 更新会话（不覆盖已有的 audio_name）
-    update_data = {'status': 'recorded', 'file_path': str(file_path)}
-    # 如果没有已有文件名，才使用上传的文件名
+
+    # 上传到 OSS，目录为 recordings
+    try:
+        oss_url = upload_file(file, directory="recordings")
+    except Exception as e:
+        return jsonify({'error': f'OSS upload failed: {str(e)}'}), 500
+
+    # 更新会话
+    update_data = {'status': 'uploaded', 'file_path': oss_url}
     session = CaptureService.get_session(session_id)
     if not session or not session.get('audio_name'):
-        update_data['audio_name'] = filename
-    
+        update_data['audio_name'] = file.filename or f"{session_id}.wav"
+
     CaptureService.update_session(session_id, update_data)
-    
+
     # 上传完成后自动创建音源
-    # 获取用户之前输入的 audio_name
     session = CaptureService.get_session(session_id)
     user_audio_name = session.get('audio_name') if session else None
-    final_audio_name = user_audio_name if user_audio_name else filename
-    
+    final_audio_name = user_audio_name if user_audio_name else file.filename
+
     AudioSourcesService.create_from_session({
         'session_id': session_id,
         'audio_name': final_audio_name,
-        'file_path': str(file_path),
+        'file_path': oss_url,
         'sample_rate': 48000,
         'channels': 2
     })
-    
+
     return jsonify({
         'ok': True,
         'status': 'uploaded',
         'session_id': session_id,
-        'file_path': str(file_path)
+        'file_path': oss_url
     })
 
 
@@ -462,10 +453,17 @@ def update_session_info(session_id):
 
 @capture_controller.route('/uploads/recordings/<filename>', methods=['GET'])
 def serve_recording(filename):
-    """服务录音文件"""
+    """服务录音文件（从 OSS 或本地）"""
     from pathlib import Path
+    # 先尝试本地
     recordings_dir = Path(__file__).parent.parent / 'uploads' / 'recordings'
     file_path = recordings_dir / filename
     if file_path.exists():
         return send_file(file_path)
-    return jsonify({'error': 'File not found'}), 404
+    # 再尝试从 OSS 下载
+    try:
+        object_name = f"recordings/{filename}"
+        local_path = download_file(object_name)
+        return send_file(local_path)
+    except Exception:
+        return jsonify({'error': 'File not found'}), 404

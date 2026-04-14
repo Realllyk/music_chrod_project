@@ -12,6 +12,7 @@ from .transcribe_controller import transcribe_controller
 from .audio_sources_controller import audio_sources_controller
 from .sources_controller import sources_controller
 from .music_controller import music_controller
+from .files_controller import files_controller
 
 __all__ = [
     'home_controller',
@@ -23,4 +24,5 @@ __all__ = [
     'audio_sources_controller',
     'sources_controller',
     'music_controller',
+    'files_controller',
 ]

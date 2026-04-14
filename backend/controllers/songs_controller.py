@@ -5,6 +5,7 @@
 
 from flask import Blueprint, request, jsonify, send_file
 from services.songs_service import SongsService
+from utils.aliyun_oss import upload_file, get_oss_url
 
 songs_controller = Blueprint('songs', __name__, url_prefix='/api/songs')
 
@@ -42,30 +43,25 @@ def get_song(song_id):
 
 @songs_controller.route('/add', methods=['POST'])
 def add_song():
-    """添加歌曲（支持文件上传或引用录音）"""
+    """添加歌曲（支持文件上传到 OSS 或引用录音）"""
     # 支持 JSON 或 multipart/form-data
     if request.content_type and 'multipart/form-data' in request.content_type:
         title = request.form.get('title')
         artist_id = request.form.get('artist_id')
         category = request.form.get('category')
         audio_file = request.files.get('audio_file')
-        
+
         if not title:
             return jsonify({'error': 'title is required'}), 400
-        
+
         audio_path = None
-        # 处理文件上传
+        # 处理文件上传到 OSS
         if audio_file and audio_file.filename:
-            import uuid
-            from pathlib import Path
-            ext = Path(audio_file.filename).suffix.lower()
-            filename = f"audio_{uuid.uuid4().hex}{ext}"
-            audio_dir = Path(__file__).parent.parent / 'uploads' / 'audio'
-            audio_dir.mkdir(parents=True, exist_ok=True)
-            file_path = audio_dir / filename
-            audio_file.save(str(file_path))
-            audio_path = f"/api/uploads/audio/{filename}"
-        
+            try:
+                audio_path = upload_file(audio_file, directory="songs")
+            except Exception as e:
+                return jsonify({'error': f'OSS upload failed: {str(e)}'}), 500
+
         song_data = {
             'title': title,
             'artist_id': int(artist_id) if artist_id else None,
@@ -74,7 +70,7 @@ def add_song():
             'source': 'local_mp3' if audio_path else 'manual',
             'status': 'ready'
         }
-        
+
         song_id = SongsService.add_song(song_data)
         if song_id:
             return jsonify({'ok': True, 'song_id': song_id, 'audio_path': audio_path})
@@ -138,10 +134,25 @@ def delete_song(song_id):
 
 @songs_controller.route("/uploads/audio/<filename>", methods=["GET"])
 def serve_audio(filename):
-    """服务音频文件"""
+    """服务音频文件（支持 OSS URL 重定向或本地文件）"""
     from pathlib import Path
+    from utils.aliyun_oss import download_file
+
+    # 如果 filename 看起来是完整 OSS URL，直接重定向
+    if filename.startswith('http://') or filename.startswith('https://'):
+        from flask import redirect
+        return redirect(filename)
+
+    # 先尝试本地
     audio_dir = Path(__file__).parent.parent / "uploads" / "audio"
     file_path = audio_dir / filename
     if file_path.exists():
         return send_file(file_path)
-    return jsonify({"error": "File not found"}), 404
+
+    # 再尝试从 OSS 下载
+    try:
+        object_name = f"songs/{filename}"
+        local_path = download_file(object_name)
+        return send_file(local_path)
+    except Exception:
+        return jsonify({"error": "File not found"}), 404

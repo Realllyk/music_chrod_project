@@ -178,6 +178,20 @@ def list_files(directory):
     Returns:
         list: 文件信息列表，每个元素为 dict，包含 key, size, last_modified
     """
+    return list_files_with_prefix(directory)
+
+
+def list_files_with_prefix(prefix, limit=1000):
+    """
+    按前缀列出 OSS 文件（支持模糊搜索）
+
+    Args:
+        prefix: OSS 对象名前缀，如 "songs/", "recordings/2025", "music/song"
+        limit: 最大返回数量
+
+    Returns:
+        list: 文件信息列表，每个元素为 dict，包含 key, name, size, last_modified, url
+    """
     if not HAS_OSS2:
         raise RuntimeError("oss2 库未安装，请运行: pip install oss2")
 
@@ -201,18 +215,17 @@ def list_files(directory):
     auth = oss2.Auth(access_key_id, access_key_secret)
     bucket = oss2.Bucket(auth, endpoint, bucket_name)
 
-    # 确保 directory 末尾有 /
-    directory = directory.rstrip('/') + '/'
+    # 确保 prefix 末尾有 /
+    prefix = prefix.rstrip('/') + '/'
 
     files = []
-    for obj in oss2.ObjectIterator(bucket, prefix=directory):
-        if obj.key != directory:
-            files.append({
-                'key': obj.key,
-                'name': obj.key.split('/')[-1],
-                'size': obj.size,
-                'last_modified': obj.last_modified,
-                'url': get_oss_url(obj.key)
-            })
+    for obj in oss2.ObjectIterator(bucket, prefix=prefix, max_keys=limit):
+        files.append({
+            'key': obj.key,
+            'name': obj.key.split('/')[-1],
+            'size': obj.size,
+            'last_modified': obj.last_modified,
+            'url': get_oss_url(obj.key)
+        })
 
     return files

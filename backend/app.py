@@ -28,6 +28,7 @@ from controllers import (
     transcribe_controller,
     sources_controller,
     music_controller,
+    files_controller,
 )
 
 # ============================================================================
@@ -73,6 +74,7 @@ app.register_blueprint(health_controller)
 app.register_blueprint(artists_controller)
 app.register_blueprint(sources_controller)
 app.register_blueprint(music_controller)
+app.register_blueprint(files_controller)
 
 # ============================================================================
 # ============================================================================

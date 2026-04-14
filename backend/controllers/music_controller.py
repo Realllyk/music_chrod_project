@@ -7,6 +7,7 @@ import os
 import uuid
 from pathlib import Path
 from flask import Blueprint, request, jsonify, send_file
+from utils.aliyun_oss import upload_file, download_file, list_files, get_oss_url
 
 music_controller = Blueprint('music', __name__, url_prefix='/api/music')
 
@@ -19,7 +20,7 @@ music_controller = Blueprint('music', __name__, url_prefix='/api/music')
 def upload_music():
     """
     POST /api/music/upload
-    上传音乐文件（支持 multipart/form-data）
+    上传音乐文件到 OSS（支持 multipart/form-data）
     """
     audio_name = request.form.get('audio_name')
     audio_file = request.files.get('audio_file')
@@ -36,25 +37,18 @@ def upload_music():
     if ext not in allowed:
         return jsonify({'error': f'Unsupported format: {ext}. Allowed: {", ".join(allowed)}'}), 400
 
-    # 生成唯一文件名
-    filename = f"{uuid.uuid4().hex[:8]}_{audio_name}.{ext}"
-
-    # 保存到 uploads/music 目录
-    upload_dir = Path(__file__).parent.parent / 'uploads' / 'music'
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    file_path = upload_dir / filename
-    audio_file.save(str(file_path))
-
-    file_size = os.path.getsize(file_path)
-
-    return jsonify({
-        'ok': True,
-        'audio_name': audio_name,
-        'filename': filename,
-        'file_path': str(file_path),
-        'file_size': file_size,
-        'format': ext
-    })
+    try:
+        # 上传到 OSS，目录为 music
+        oss_url = upload_file(audio_file, directory="music")
+        return jsonify({
+            'ok': True,
+            'audio_name': audio_name,
+            'filename': oss_url.split('/')[-1],
+            'file_path': oss_url,
+            'format': ext
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # ============================================================================
@@ -65,7 +59,7 @@ def upload_music():
 def download_midi(filename):
     """
     GET /api/music/download/midi/<filename>
-    下载 MIDI 文件
+    从 OSS 下载 MIDI 文件
     """
     # 安全检查：只允许 .mid 和 .midi 扩展名
     if not filename.endswith(('.mid', '.midi')):
@@ -74,20 +68,15 @@ def download_midi(filename):
     # 防止路径遍历
     filename = os.path.basename(filename)
 
-    # 查找文件：优先 outputs 目录
-    output_dir = Path(__file__).parent.parent / 'outputs'
-    file_path = output_dir / filename
-
-    if not file_path.exists():
-        # 尝试 uploads 目录
-        upload_dir = Path(__file__).parent.parent / 'uploads'
-        file_path = upload_dir / filename
-        if not file_path.exists():
-            return jsonify({'error': 'File not found'}), 404
-
-    return send_file(
-        file_path,
-        mimetype='audio/midi',
-        as_attachment=True,
-        download_name=filename
-    )
+    try:
+        # 尝试从 OSS 下载 outputs/ 目录下的文件
+        object_name = f"outputs/{filename}"
+        local_path = download_file(object_name)
+        return send_file(
+            local_path,
+            mimetype='audio/midi',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        return jsonify({'error': f'File not found: {str(e)}'}), 404
