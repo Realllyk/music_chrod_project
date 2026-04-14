@@ -4,6 +4,7 @@
 """
 
 import os
+import shutil
 import tempfile
 from pathlib import Path
 import numpy as np
@@ -24,7 +25,7 @@ class DemucsMelodyTranscriber(MelodyTranscriberBase):
     
     def extract_melody(self, audio_path: str) -> dict:
         """使用 demucs 分离人声，然后提取旋律"""
-        
+
         try:
             import demucs.separate as demucs_separate
         except ImportError:
@@ -33,65 +34,71 @@ class DemucsMelodyTranscriber(MelodyTranscriberBase):
                 'midi_path': None,
                 'error': 'demucs not installed'
             }
-        
-        temp_dir = tempfile.mkdtemp()
-        
+
+        temp_dir = tempfile.mkdtemp(prefix='demucs_melody_')
+
         try:
-            # 1. 使用 demucs 分离
-            # demucs.separate 会自动保存到 separated/{model}/{track_name}/
+            # 1. 使用 demucs 分离人声
             demucs_separate.main([
                 '--out', temp_dir,
+                '--two-stems', 'vocals',
+                '--mp3',
                 '--model', 'htdemucs',
                 audio_path
             ])
-            
+
             # 2. 找到人声文件
             basename = os.path.splitext(os.path.basename(audio_path))[0]
-            vocals_path = os.path.join(temp_dir, 'htdemucs', basename, 'vocals.wav')
-            
-            if not os.path.exists(vocals_path):
+            candidates = [
+                os.path.join(temp_dir, 'htdemucs', basename, 'vocals.wav'),
+                os.path.join(temp_dir, 'htdemucs', basename, 'vocals.mp3'),
+            ]
+            vocals_path = next((path for path in candidates if os.path.exists(path)), None)
+
+            if not vocals_path:
                 return {
                     'notes': [],
                     'midi_path': None,
                     'error': 'Failed to extract vocals'
                 }
-            
+
             # 3. 使用 librosa 提取旋律
             import librosa
             y, sr = librosa.load(vocals_path, sr=self.sample_rate)
-            
+
             f0, voiced_flag, voiced_probs = librosa.pyin(
-                y, 
-                fmin=librosa.note_to_hz('C1'),
-                fmax=librosa.note_to_hz('C8'),
+                y,
+                fmin=librosa.note_to_hz('C2'),
+                fmax=librosa.note_to_hz('C7'),
                 sr=sr,
                 hop_length=self.hop_length
             )
-            
+
             # 4. 转换为音符
             self.notes = []
             frame_times = librosa.times_like(f0, sr=sr, hop_length=self.hop_length)
-            
+
             for i, (freq, voiced) in enumerate(zip(f0, voiced_flag)):
-                if voiced and freq > 0:
+                if voiced and freq and freq > 0:
                     midi = librosa.hz_to_midi(freq)
-                    midi_quantized = round(midi * 12) / 12
-                    note_name = librosa.midi_to_note(int(midi_quantized))
-                    
+                    midi_quantized = int(round(midi))
+                    note_name = librosa.midi_to_note(midi_quantized)
+
                     self.notes.append({
-                        'pitch': freq,
-                        'midi': float(midi_quantized),
+                        'pitch': float(freq),
+                        'midi': midi_quantized,
                         'note': note_name,
                         'start': float(frame_times[i]),
                         'duration': float(self.hop_length / sr)
                     })
-            
+
             return {
                 'notes': self.notes,
                 'midi_path': None,
-                'duration': len(y) / sr
+                'duration': len(y) / sr,
+                'vocals_path': vocals_path
             }
-            
+
         except Exception as e:
             self.notes = []
             return {
@@ -99,6 +106,8 @@ class DemucsMelodyTranscriber(MelodyTranscriberBase):
                 'midi_path': None,
                 'error': str(e)
             }
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
     
     def save_midi(self, output_path: str = None):
         """保存为 MIDI 文件"""

@@ -3,6 +3,7 @@
 """
 
 import os
+import shutil
 import tempfile
 from pathlib import Path
 import numpy as np
@@ -36,7 +37,7 @@ class SpleeterMelodyTranscriber(MelodyTranscriberBase):
                 'error': 'spleeter not installed'
             }
         
-        temp_dir = tempfile.mkdtemp()
+        temp_dir = tempfile.mkdtemp(prefix='spleeter_melody_')
         print(f"[SpleeterMelody] 临时目录: {temp_dir}")
         
         try:
@@ -90,12 +91,12 @@ class SpleeterMelodyTranscriber(MelodyTranscriberBase):
             for i, (freq, voiced) in enumerate(zip(f0, voiced_flag)):
                 if voiced and freq > 0:
                     midi = librosa.hz_to_midi(freq)
-                    midi_quantized = round(midi * 12) / 12
-                    note_name = librosa.midi_to_note(int(midi_quantized))
+                    midi_quantized = int(round(midi))
+                    note_name = librosa.midi_to_note(midi_quantized)
                     
                     self.notes.append({
-                        'pitch': freq,
-                        'midi': float(midi_quantized),
+                        'pitch': float(freq),
+                        'midi': midi_quantized,
                         'note': note_name,
                         'start': float(frame_times[i]),
                         'duration': float(self.hop_length / sr)
@@ -119,6 +120,8 @@ class SpleeterMelodyTranscriber(MelodyTranscriberBase):
                 'midi_path': None,
                 'error': str(e)
             }
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
     
     def save_midi(self, output_path: str = None):
         """保存为 MIDI 文件"""

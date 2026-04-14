@@ -8,6 +8,7 @@ import json
 import uuid
 import os
 import threading
+import logging
 from pathlib import Path
 from flask import Blueprint, request, jsonify
 from services.songs_service import SongsService
@@ -20,9 +21,14 @@ with open(_config_path) as f:
     _config = json.load(f)
 
 ALGORITHM_CONFIG = _config.get('transcription', {}).get('algorithm', {})
+VOCAL_SEPARATION_CONFIG = _config.get('transcription', {}).get('vocal_separation', {})
 DEFAULT_MELODY_ALGO = ALGORITHM_CONFIG.get('melody', 'librosa')
 DEFAULT_CHORD_ALGO = ALGORITHM_CONFIG.get('chord', 'librosa')
+DEFAULT_VOCAL_PROVIDER = VOCAL_SEPARATION_CONFIG.get('provider', 'demucs')
+VOCAL_FALLBACK_ORDER = VOCAL_SEPARATION_CONFIG.get('fallback_order', ['spleeter', 'librosa'])
 ALLOWED_ALGOS = {'librosa', 'spleeter', 'demucs'}
+
+logger = logging.getLogger(__name__)
 
 # 创建 Blueprint
 transcribe_controller = Blueprint('transcribe', __name__, url_prefix='/api/transcribe')
@@ -117,11 +123,56 @@ def _serialize_task(task):
     }
 
 
+def _create_melody_transcriber():
+    """创建旋律提取器。优先使用人声分离方案，失败时逐级降级。"""
+    provider_order = [DEFAULT_VOCAL_PROVIDER] + [item for item in VOCAL_FALLBACK_ORDER if item != DEFAULT_VOCAL_PROVIDER]
+    last_error = None
+
+    for provider in provider_order:
+        if provider not in ALLOWED_ALGOS:
+            continue
+
+        try:
+            if provider == 'demucs':
+                from transcriber.demucs.melody import DemucsMelodyTranscriber
+                logger.info("旋律提取使用 demucs 人声分离 + pitch 提取")
+                return DemucsMelodyTranscriber()
+            if provider == 'spleeter':
+                from transcriber.spleeter.melody import SpleeterMelodyTranscriber
+                logger.info("旋律提取使用 spleeter 人声分离 + pitch 提取")
+                return SpleeterMelodyTranscriber()
+            if provider == 'librosa':
+                from transcriber.librosa.melody import LibrosaMelodyTranscriber
+                logger.warning("旋律提取回退到 librosa 直接处理整首混音")
+                return LibrosaMelodyTranscriber()
+        except Exception as e:
+            last_error = e
+            logger.warning(f"初始化旋律提取器失败，provider={provider}, error={e}")
+
+    raise RuntimeError(f"No available melody transcriber provider: {last_error}")
+
+
+def _create_chord_transcriber(algo):
+    if algo == 'librosa':
+        from transcriber.librosa.chord import LibrosaChordTranscriber
+        return LibrosaChordTranscriber()
+    if algo == 'spleeter':
+        from transcriber.spleeter.chord import SpleeterChordTranscriber
+        return SpleeterChordTranscriber()
+    if algo == 'demucs':
+        from transcriber.demucs.chord import DemucsChordTranscriber
+        return DemucsChordTranscriber()
+    raise ValueError(f'Unsupported transcription algorithm: {algo}')
+
+
 def run_transcription(task_id, song_id, mode):
     """后台执行提取任务，全程使用 OSS"""
     full_audio_path = None
+    midi_path = None
 
     try:
+        logger.info(f"[task_id={task_id}] 提取任务启动, song_id={song_id}, mode={mode}")
+
         # 更新状态为处理中
         update_task(task_id, 'processing')
         SongsService.update_status(song_id, 'processing')
@@ -137,8 +188,9 @@ def run_transcription(task_id, song_id, mode):
             update_task(task_id, 'failed', error='Audio file not found')
             return
 
-        # 从 OSS 下载音频
+        logger.info(f"[task_id={task_id}] 开始下载原始音频")
         full_audio_path = download_file(audio_path)
+        logger.info(f"[task_id={task_id}] 原始音频下载完成: {full_audio_path}")
 
         # 从配置读取算法
         algo = DEFAULT_MELODY_ALGO if mode == 'melody' else DEFAULT_CHORD_ALGO
@@ -147,31 +199,16 @@ def run_transcription(task_id, song_id, mode):
 
         # 根据配置选择实现类
         if mode == 'melody':
-            if algo == 'librosa':
-                from transcriber.librosa.melody import LibrosaMelodyTranscriber
-                transcriber = LibrosaMelodyTranscriber()
-            elif algo == 'spleeter':
-                from transcriber.spleeter.melody import SpleeterMelodyTranscriber
-                transcriber = SpleeterMelodyTranscriber()
-            elif algo == 'demucs':
-                from transcriber.demucs.melody import DemucsMelodyTranscriber
-                transcriber = DemucsMelodyTranscriber()
-        else:
-            if algo == 'librosa':
-                from transcriber.librosa.chord import LibrosaChordTranscriber
-                transcriber = LibrosaChordTranscriber()
-            elif algo == 'spleeter':
-                from transcriber.spleeter.chord import SpleeterChordTranscriber
-                transcriber = SpleeterChordTranscriber()
-            elif algo == 'demucs':
-                from transcriber.demucs.chord import DemucsChordTranscriber
-                transcriber = DemucsChordTranscriber()
-
-        # 执行转录
-        if mode == 'melody':
+            transcriber = _create_melody_transcriber()
+            logger.info(f"[task_id={task_id}] 开始旋律提取")
             result = transcriber.extract_melody(full_audio_path)
         else:
+            transcriber = _create_chord_transcriber(algo)
+            logger.info(f"[task_id={task_id}] 开始和弦提取")
             result = transcriber.extract_chords(full_audio_path)
+
+        if isinstance(result, dict) and result.get('error'):
+            raise RuntimeError(result.get('error'))
 
         # 保存 MIDI 到本地临时目录
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -181,10 +218,14 @@ def run_transcription(task_id, song_id, mode):
         midi_filename = f"{song_id}_{mode}_{task_id}.mid"
         midi_path = os.path.join(output_dir, midi_filename)
 
+        logger.info(f"[task_id={task_id}] 开始生成 MIDI: {midi_path}")
         transcriber.save_midi(midi_path)
+        if not os.path.exists(midi_path):
+            raise RuntimeError('MIDI file was not generated')
 
         # 上传 MIDI 到 OSS
         oss_object_name = f"transcribe/{midi_filename}"
+        logger.info(f"[task_id={task_id}] 开始上传 MIDI 到 OSS: {oss_object_name}")
         result_path = upload_file(midi_path, directory="", object_name=oss_object_name)
 
         # 更新歌曲
@@ -199,16 +240,22 @@ def run_transcription(task_id, song_id, mode):
 
         # 更新任务状态
         update_task(task_id, 'completed', result_path=result_path)
+        logger.info(f"[task_id={task_id}] 提取任务完成: {result_path}")
 
     except Exception as e:
-        print(f"提取失败: {e}")
+        logger.exception(f"[task_id={task_id}] 提取失败: {e}")
         SongsService.update_status(song_id, 'failed')
         update_task(task_id, 'failed', error=str(e))
     finally:
-        # 清理临时下载的 OSS 文件
+        # 清理临时下载的 OSS 文件和本地 MIDI
         if full_audio_path and os.path.exists(full_audio_path):
             try:
                 os.remove(full_audio_path)
+            except Exception:
+                pass
+        if midi_path and os.path.exists(midi_path):
+            try:
+                os.remove(midi_path)
             except Exception:
                 pass
 
