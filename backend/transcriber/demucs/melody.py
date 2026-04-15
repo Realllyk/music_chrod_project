@@ -3,6 +3,7 @@
 使用 demucs 分离人声，然后使用 librosa 提取旋律
 """
 
+import json
 import os
 import shutil
 import tempfile
@@ -18,10 +19,17 @@ class DemucsMelodyTranscriber(MelodyTranscriberBase):
         self.sample_rate = sr
         self.hop_length = hop_length
         self.notes = []
+        self.demucs_config = self._load_demucs_config()
     
     @property
     def name(self) -> str:
         return "demucs"
+
+    def _load_demucs_config(self) -> dict:
+        config_path = Path(__file__).resolve().parents[2] / 'config.json'
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        return config.get('transcription', {}).get('vocal_separation', {}).get('demucs', {})
     
     def extract_melody(self, audio_path: str) -> dict:
         """使用 demucs 分离人声，然后提取旋律"""
@@ -39,19 +47,47 @@ class DemucsMelodyTranscriber(MelodyTranscriberBase):
 
         try:
             # 1. 使用 demucs 分离人声
-            demucs_separate.main([
+            model_name = self.demucs_config.get('model_name', 'htdemucs')
+            two_stems = self.demucs_config.get('two_stems', 'vocals')
+            output_format = self.demucs_config.get('output_format', 'mp3')
+
+            demucs_args = [
                 '--out', temp_dir,
-                '--two-stems', 'vocals',
-                '--mp3',
-                '--model', 'htdemucs',
-                audio_path
-            ])
+                '--two-stems', two_stems,
+                '-n', model_name,
+            ]
+
+            device = self.demucs_config.get('device')
+            jobs = self.demucs_config.get('jobs')
+            segment = self.demucs_config.get('segment')
+            shifts = self.demucs_config.get('shifts')
+            overlap = self.demucs_config.get('overlap')
+
+            if device:
+                demucs_args.extend(['-d', str(device)])
+            if isinstance(jobs, int) and jobs >= 0:
+                demucs_args.extend(['-j', str(jobs)])
+            if segment is not None:
+                demucs_args.extend(['--segment', str(segment)])
+            if shifts is not None:
+                demucs_args.extend(['--shifts', str(shifts)])
+            if overlap is not None:
+                demucs_args.extend(['--overlap', str(overlap)])
+
+            if output_format == 'mp3':
+                demucs_args.append('--mp3')
+            elif output_format == 'flac':
+                demucs_args.append('--flac')
+            demucs_args.append(audio_path)
+
+            demucs_separate.main(demucs_args)
 
             # 2. 找到人声文件
             basename = os.path.splitext(os.path.basename(audio_path))[0]
             candidates = [
-                os.path.join(temp_dir, 'htdemucs', basename, 'vocals.wav'),
-                os.path.join(temp_dir, 'htdemucs', basename, 'vocals.mp3'),
+                os.path.join(temp_dir, model_name, basename, 'vocals.wav'),
+                os.path.join(temp_dir, model_name, basename, 'vocals.mp3'),
+                os.path.join(temp_dir, model_name, basename, 'vocals.flac'),
             ]
             vocals_path = next((path for path in candidates if os.path.exists(path)), None)
 

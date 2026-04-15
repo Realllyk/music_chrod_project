@@ -40,7 +40,17 @@
     },
     "vocal_separation": {
       "provider": "demucs",
-      "fallback_order": ["spleeter", "librosa"]
+      "fallback_order": ["spleeter", "librosa"],
+      "demucs": {
+        "model_name": "htdemucs",
+        "two_stems": "vocals",
+        "output_format": "mp3",
+        "device": "cpu",
+        "jobs": 0,
+        "segment": null,
+        "shifts": 1,
+        "overlap": 0.25
+      }
     }
   },
   "paths": {
