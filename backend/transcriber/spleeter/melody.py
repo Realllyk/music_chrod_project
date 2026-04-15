@@ -134,14 +134,14 @@ class SpleeterMelodyTranscriber(MelodyTranscriberBase):
             return
         
         try:
-            from music21 import stream, note
+            from music21 import stream, note, metadata
         except ImportError:
             print(f"[SpleeterMelody] music21 not installed")
             return
         
         try:
             s = stream.Stream()
-            s.metadata = stream.Metadata()
+            s.metadata = metadata.Metadata()
             s.metadata.title = 'Spleeter Melody'
             
             for n in self.notes:

@@ -151,13 +151,13 @@ class DemucsMelodyTranscriber(MelodyTranscriberBase):
             return
         
         try:
-            from music21 import stream, note
+            from music21 import stream, note, metadata
         except ImportError:
             return
         
         try:
             s = stream.Stream()
-            s.metadata = stream.Metadata()
+            s.metadata = metadata.Metadata()
             s.metadata.title = 'Demucs Melody'
             
             for n in self.notes:
