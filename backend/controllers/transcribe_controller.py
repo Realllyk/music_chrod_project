@@ -111,7 +111,7 @@ def get_task(task_id):
 def _serialize_task(task):
     if not task:
         return None
-    return {
+    payload = {
         'task_id': task.get('task_id'),
         'song_id': task.get('song_id'),
         'mode': task.get('mode'),
@@ -121,6 +121,9 @@ def _serialize_task(task):
         'created_at': task.get('created_at').isoformat() if task.get('created_at') else None,
         'updated_at': task.get('updated_at').isoformat() if task.get('updated_at') else None,
     }
+    if task.get('vocal_stem_path'):
+        payload['vocal_stem_path'] = task.get('vocal_stem_path')
+    return payload
 
 
 def _create_melody_transcriber():
@@ -169,6 +172,8 @@ def run_transcription(task_id, song_id, mode):
     """后台执行提取任务，全程使用 OSS"""
     full_audio_path = None
     midi_path = None
+    vocals_upload_path = None
+    local_vocals_path = None
 
     try:
         logger.info(f"[task_id={task_id}] 提取任务启动, song_id={song_id}, mode={mode}")
@@ -210,6 +215,14 @@ def run_transcription(task_id, song_id, mode):
         if isinstance(result, dict) and result.get('error'):
             raise RuntimeError(result.get('error'))
 
+        if mode == 'melody' and isinstance(result, dict) and result.get('vocals_path'):
+            local_vocals_path = result.get('vocals_path')
+            vocals_ext = os.path.splitext(local_vocals_path)[1] or '.wav'
+            vocals_object_name = f"transcribe/vocals/{song_id}_{task_id}{vocals_ext}"
+            logger.info(f"[task_id={task_id}] 开始上传人声文件到 OSS: {vocals_object_name}")
+            vocals_upload_path = upload_file(local_vocals_path, directory="", object_name=vocals_object_name)
+            logger.info(f"[task_id={task_id}] 人声文件已上传: {vocals_upload_path}")
+
         # 保存 MIDI 到本地临时目录
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         output_dir = os.path.join(base_dir, 'outputs', 'transcribe')
@@ -240,6 +253,8 @@ def run_transcription(task_id, song_id, mode):
 
         # 更新任务状态
         update_task(task_id, 'completed', result_path=result_path)
+        if vocals_upload_path:
+            logger.info(f"[task_id={task_id}] 人声文件保留地址: {vocals_upload_path}")
         logger.info(f"[task_id={task_id}] 提取任务完成: {result_path}")
 
     except Exception as e:
@@ -256,6 +271,11 @@ def run_transcription(task_id, song_id, mode):
         if midi_path and os.path.exists(midi_path):
             try:
                 os.remove(midi_path)
+            except Exception:
+                pass
+        if local_vocals_path and os.path.exists(local_vocals_path):
+            try:
+                os.remove(local_vocals_path)
             except Exception:
                 pass
 

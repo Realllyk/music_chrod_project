@@ -17,6 +17,7 @@ class SpleeterMelodyTranscriber(MelodyTranscriberBase):
         self.sample_rate = sr
         self.hop_length = hop_length
         self.notes = []  # 存储提取的音符
+        self.preserved_vocals_path = None
     
     @property
     def name(self) -> str:
@@ -64,7 +65,13 @@ class SpleeterMelodyTranscriber(MelodyTranscriberBase):
                     'error': 'Failed to extract vocals'
                 }
             
-            # 3. 从人声提取旋律（使用 librosa）
+            # 3. 复制人声文件到可保留的临时路径，供后续上传 OSS
+            preserved_suffix = Path(vocals_path).suffix or '.wav'
+            preserved_vocals_path = os.path.join(tempfile.gettempdir(), f"vocals_{next(tempfile._get_candidate_names())}{preserved_suffix}")
+            shutil.copy2(vocals_path, preserved_vocals_path)
+            self.preserved_vocals_path = preserved_vocals_path
+
+            # 4. 从人声提取旋律（使用 librosa）
             import librosa
             print(f"[SpleeterMelody] 加载音频...")
             y, sr = librosa.load(vocals_path, sr=self.sample_rate)
@@ -107,11 +114,18 @@ class SpleeterMelodyTranscriber(MelodyTranscriberBase):
             return {
                 'notes': self.notes,
                 'midi_path': None,
-                'duration': len(y) / sr
+                'duration': len(y) / sr,
+                'vocals_path': self.preserved_vocals_path
             }
             
         except Exception as e:
             self.notes = []
+            if self.preserved_vocals_path and os.path.exists(self.preserved_vocals_path):
+                try:
+                    os.remove(self.preserved_vocals_path)
+                except Exception:
+                    pass
+            self.preserved_vocals_path = None
             print(f"[SpleeterMelody] Exception: {e}")
             import traceback
             traceback.print_exc()
