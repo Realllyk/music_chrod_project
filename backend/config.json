@@ -35,7 +35,7 @@
       "hpss_margin": 4.0
     },
     "algorithm": {
-      "melody": "librosa",
+      "melody": "demucs",
       "chord": "librosa"
     },
     "vocal_separation": {
