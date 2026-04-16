@@ -25,10 +25,12 @@
   },
   "transcription": {
     "melody": {
-      "fmin": 80,
-      "fmax": 400,
+      "fmin": 65,
+      "fmax": 1047,
       "hop_length": 512,
-      "window_size": 7
+      "window_size": 7,
+      "confidence_threshold": 0.5,
+      "min_note_duration": 0.08
     },
     "polyphonic": {
       "n_voices": 2,
@@ -43,7 +45,7 @@
       "demucs": {
         "model_name": "htdemucs",
         "two_stems": "vocals",
-        "output_format": "mp3",
+        "output_format": "wav",
         "device": "cpu",
         "jobs": 0,
         "segment": null,

@@ -102,6 +102,7 @@ fmin, fmax：基频搜索范围
 ================================================================================
 """
 
+import json
 import numpy as np
 import librosa
 from transcriber.base import MelodyTranscriberBase, AnalysisType
@@ -136,7 +137,19 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         self.pitch = None  # 基频
         self.confidence = None  # 置信度
         self.notes = None  # 识别的音符
+        self.config = self._load_melody_config()
+        self.fmin = self.config.get('fmin', 65)
+        self.fmax = self.config.get('fmax', 1047)
+        self.window_size = self.config.get('window_size', 7)
+        self.confidence_threshold = self.config.get('confidence_threshold', 0.5)
+        self.min_note_duration = self.config.get('min_note_duration', 0.08)
     
+    def _load_melody_config(self) -> Dict:
+        config_path = Path(__file__).resolve().parents[2] / 'config.json'
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        return config.get('transcription', {}).get('melody', {})
+
     def load_audio(self, audio_path: str) -> np.ndarray:
         """加载音频文件"""
         logger.info(f"加载音频: {audio_path}")
@@ -159,14 +172,15 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         Returns:
             (pitch, confidence) - 基频和置信度
         """
-        logger.info("使用 PYIN 提取基频...")
+        logger.info(f"使用 PYIN 提取基频... fmin={self.fmin}, fmax={self.fmax}")
         
         # PYIN 基频提取
         f0, voiced_flag, voiced_probs = librosa.pyin(
             self.audio,
-            fmin=80,    # 最小频率 (80 Hz)
-            fmax=400,   # 最大频率 (400 Hz)
-            sr=self.sr
+            fmin=self.fmin,
+            fmax=self.fmax,
+            sr=self.sr,
+            hop_length=self.hop_length
         )
         
         # 将 NaN 替换为 0
@@ -222,7 +236,7 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         Returns:
             音符列表
         """
-        logger.info("将基频转换为音符...")
+        logger.info(f"将基频转换为音符... confidence_threshold={self.confidence_threshold}, min_note_duration={self.min_note_duration}")
         
         if self.pitch is None:
             raise ValueError("请先提取基频")
@@ -236,7 +250,8 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         current_start = 0
         
         for i, freq in enumerate(self.pitch):
-            if freq <= 0:  # 无声部分
+            confidence = self.confidence[i] if self.confidence is not None else 0.8
+            if freq <= 0 or confidence < self.confidence_threshold:  # 无声或低置信度
                 if current_note is not None:
                     # 保存当前音符
                     current_note['end_frame'] = i
@@ -254,7 +269,7 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
                         'start_frame': i,
                         'midi': midi_rounded,
                         'freq': freq,
-                        'confidence': self.confidence[i] if self.confidence is not None else 0.8
+                        'confidence': confidence
                     }
                 elif current_note['midi'] != midi_rounded:
                     # 音符改变
@@ -266,7 +281,7 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
                         'start_frame': i,
                         'midi': midi_rounded,
                         'freq': freq,
-                        'confidence': self.confidence[i] if self.confidence is not None else 0.8
+                        'confidence': confidence
                     }
         
         # 保存最后一个音符
@@ -274,9 +289,13 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
             current_note['end_frame'] = len(self.pitch)
             current_note['duration'] = (len(self.pitch) - current_note['start_frame']) * self.hop_length / self.sr
             notes.append(current_note)
+
+        raw_note_count = len(notes)
+        notes = [note for note in notes if note.get('duration', 0) >= self.min_note_duration]
+        filtered_count = raw_note_count - len(notes)
         
         self.notes = notes
-        logger.info(f"识别音符数: {len(notes)}")
+        logger.info(f"识别音符数: 原始={raw_note_count}, 过滤后={len(notes)}, 过滤掉过短音符={filtered_count}")
         return notes
     
     def notes_to_dict(self) -> Dict:
@@ -365,7 +384,7 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
             self.extract_pitch_pyin()
             
             # 3. 平滑基频
-            self.smooth_pitch(window_size=7)
+            self.smooth_pitch(window_size=self.window_size)
             
             # 4. 转换为音符
             self.pitch_to_notes()
