@@ -4,10 +4,117 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>音乐扒谱</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;margin:0;padding:20px}
+.card{background:#fff;border-radius:12px;padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.05)}
+.card h2{font-size:18px;margin-bottom:16px;color:#333}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:16px}
+.stat-card{background:#fff;border-radius:12px;padding:20px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.05);border-top:3px solid #4ecdc4}
+.stat-number{font-size:36px;font-weight:700;color:#4ecdc4;line-height:1.2}
+.stat-label{font-size:13px;color:#888;margin-top:6px}
+.shortcuts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px}
+.shortcut-card{background:#fff;border-radius:12px;padding:20px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.05);cursor:pointer;transition:box-shadow 0.2s,transform 0.1s;text-decoration:none;display:block;color:inherit}
+.shortcut-card:hover{box-shadow:0 4px 16px rgba(78,205,196,0.2);transform:translateY(-2px)}
+.shortcut-icon{font-size:32px;margin-bottom:8px}
+.shortcut-label{font-size:14px;color:#333;font-weight:500}
+.shortcut-desc{font-size:12px;color:#aaa;margin-top:4px}
+h1{color:#333;margin-bottom:4px}
+.subtitle{color:#888;margin-bottom:24px;font-size:14px}
+</style>
 </head>
 <body>
-<h1>欢迎使用音乐扒谱</h1>
-<p>选择左侧菜单开始使用</p>
+<h1>🎵 欢迎使用音乐扒谱</h1>
+<p class="subtitle">智能音乐分析与提取系统</p>
+
+<div class="card">
+<h2>数据统计</h2>
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-number" id="statSongs">-</div>
+        <div class="stat-label">歌曲总数</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number" id="statArtists">-</div>
+        <div class="stat-label">歌手总数</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number" id="statSources">-</div>
+        <div class="stat-label">音源总数</div>
+    </div>
+</div>
+</div>
+
+<div class="card">
+<h2>快捷入口</h2>
+<div class="shortcuts-grid">
+    <div class="shortcut-card" onclick="window.location.href='/songs'">
+        <div class="shortcut-icon">🎵</div>
+        <div class="shortcut-label">查询歌曲</div>
+        <div class="shortcut-desc">搜索歌曲库</div>
+    </div>
+    <div class="shortcut-card" onclick="window.location.href='/songs/add'">
+        <div class="shortcut-icon">➕</div>
+        <div class="shortcut-label">创建歌曲</div>
+        <div class="shortcut-desc">添加新歌曲</div>
+    </div>
+    <div class="shortcut-card" onclick="window.location.href='/artists'">
+        <div class="shortcut-icon">👤</div>
+        <div class="shortcut-label">歌手列表</div>
+        <div class="shortcut-desc">管理歌手</div>
+    </div>
+    <div class="shortcut-card" onclick="window.location.href='/artists/add'">
+        <div class="shortcut-icon">🧑‍🎤</div>
+        <div class="shortcut-label">新增歌手</div>
+        <div class="shortcut-desc">添加歌手信息</div>
+    </div>
+    <div class="shortcut-card" onclick="window.location.href='/capture'">
+        <div class="shortcut-icon">🎙️</div>
+        <div class="shortcut-label">录音采集</div>
+        <div class="shortcut-desc">开始录音</div>
+    </div>
+    <div class="shortcut-card" onclick="window.location.href='/recordings'">
+        <div class="shortcut-icon">📼</div>
+        <div class="shortcut-label">录音文件</div>
+        <div class="shortcut-desc">管理录音</div>
+    </div>
+    <div class="shortcut-card" onclick="window.location.href='/audio-sources/upload'">
+        <div class="shortcut-icon">⬆️</div>
+        <div class="shortcut-label">上传音源</div>
+        <div class="shortcut-desc">上传音频文件</div>
+    </div>
+    <div class="shortcut-card" onclick="window.location.href='/transcribe'">
+        <div class="shortcut-icon">🎼</div>
+        <div class="shortcut-label">提取分析</div>
+        <div class="shortcut-desc">旋律/和弦提取</div>
+    </div>
+</div>
+</div>
+
+<script>
+const API_BASE = '';
+
+async function loadStats(){
+    const [songsRes, artistsRes, sourcesRes] = await Promise.allSettled([
+        fetch(API_BASE+'/api/songs/list?limit=1').then(x=>x.json()),
+        fetch(API_BASE+'/api/artists/list?limit=1').then(x=>x.json()),
+        fetch(API_BASE+'/api/audio-sources/list?limit=1').then(x=>x.json())
+    ]);
+    if(songsRes.status==='fulfilled'){
+        const d=songsRes.value;
+        document.getElementById('statSongs').textContent=d.total!=null?d.total:(d.songs?d.songs.length:'?');
+    }
+    if(artistsRes.status==='fulfilled'){
+        const d=artistsRes.value;
+        document.getElementById('statArtists').textContent=d.total!=null?d.total:(d.artists?d.artists.length:'?');
+    }
+    if(sourcesRes.status==='fulfilled'){
+        const d=sourcesRes.value;
+        document.getElementById('statSources').textContent=d.total!=null?d.total:(d.sources?d.sources.length:'?');
+    }
+}
+
+loadStats();
+</script>
 <script src="/js/menu.js"></script>
 </body>
 </html>

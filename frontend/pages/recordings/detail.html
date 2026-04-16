@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>录音详情</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;margin:0;padding:20px}
+.card{background:#fff;border-radius:12px;padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.05)}
+.card h3{font-size:18px;margin-bottom:16px;color:#333}
+.btn{padding:10px 20px;border:none;border-radius:8px;font-size:14px;cursor:pointer;margin-right:10px}
+.btn-primary{background:#4ecdc4;color:#fff}
+.btn-danger{background:#ff6b6b;color:#fff}
+.btn-secondary{background:#95a5a6;color:#fff}
+.info-row{display:flex;margin-bottom:12px;align-items:flex-start}
+.info-label{width:100px;color:#888;font-size:14px;flex-shrink:0}
+.info-value{color:#333;font-size:14px;word-break:break-all}
+.audio-player{width:100%;margin-top:8px}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;margin-bottom:6px;color:#666;font-size:14px}
+.form-group input{width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;box-sizing:border-box;font-size:14px}
+.back{color:#4ecdc4;text-decoration:none;margin-bottom:16px;display:inline-block}
+</style>
+</head>
+<body>
+<button class="btn btn-secondary" onclick="window.location.href='/recordings'">← 返回录音列表</button>
+<h1>🎙️ 录音详情</h1>
+<div class="card">
+<h3>基本信息</h3>
+<div id="infoContent"><p style="color:#aaa">加载中...</p></div>
+</div>
+<div class="card" id="audioCard" style="display:none">
+<h3>音频预览</h3>
+<audio id="audioPlayer" controls class="audio-player"></audio>
+</div>
+<div class="card">
+<h3>编辑文件名</h3>
+<div class="form-group">
+<label>文件名 (audio_name)</label>
+<input type="text" id="editAudioName" placeholder="输入新文件名">
+</div>
+<button class="btn btn-primary" onclick="saveName()">保存修改</button>
+</div>
+<div class="card">
+<h3>操作</h3>
+<button class="btn btn-secondary" onclick="window.location.href='/recordings'">返回列表</button>
+<button class="btn btn-danger" onclick="deleteRecording()">删除录音</button>
+</div>
+<script>
+const API_BASE = '';
+let currentSessionId = null;
+
+function init(){
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+    if(!id){ window.location.href='/recordings'; return; }
+    currentSessionId = id;
+    loadDetail(id);
+}
+
+async function loadDetail(id){
+    try{
+        const r = await fetch(API_BASE+'/api/capture/detail/'+id).then(x=>x.json());
+        if(r.error){ alert(r.error); return; }
+        const s = r;
+        document.getElementById('infoContent').innerHTML = `
+            <div class="info-row"><span class="info-label">Session ID</span><span class="info-value">${s.session_id||'-'}</span></div>
+            <div class="info-row"><span class="info-label">文件名</span><span class="info-value">${s.audio_name||'-'}</span></div>
+            <div class="info-row"><span class="info-label">时长(秒)</span><span class="info-value">${s.duration_sec!=null?s.duration_sec+'s':'-'}</span></div>
+            <div class="info-row"><span class="info-label">采样率</span><span class="info-value">${s.sample_rate!=null?s.sample_rate+' Hz':'-'}</span></div>
+            <div class="info-row"><span class="info-label">状态</span><span class="info-value">${s.status||'-'}</span></div>
+            <div class="info-row"><span class="info-label">创建时间</span><span class="info-value">${s.created_at||'-'}</span></div>
+            <div class="info-row"><span class="info-label">文件路径</span><span class="info-value">${s.file_path||'-'}</span></div>
+        `;
+        document.getElementById('editAudioName').value = s.audio_name||'';
+        if(s.file_path){
+            document.getElementById('audioCard').style.display='block';
+            document.getElementById('audioPlayer').src = API_BASE+s.file_path;
+        }
+    }catch(e){ alert('加载失败: '+e.message); }
+}
+
+async function saveName(){
+    const name = document.getElementById('editAudioName').value.trim();
+    if(!name){ alert('请输入文件名'); return; }
+    try{
+        const r = await fetch(API_BASE+'/api/capture/sessions/'+currentSessionId,{
+            method:'PUT',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({audio_name:name})
+        }).then(x=>x.json());
+        if(r.ok){ alert('保存成功'); loadDetail(currentSessionId); }
+        else{ alert(r.error||'保存失败'); }
+    }catch(e){ alert('保存失败: '+e.message); }
+}
+
+async function deleteRecording(){
+    if(!confirm('确定删除该录音？此操作不可撤销。'))return;
+    try{
+        const r = await fetch(API_BASE+'/api/capture/sessions/'+currentSessionId,{method:'DELETE'}).then(x=>x.json());
+        if(r.ok){ alert('删除成功'); window.location.href='/recordings'; }
+        else{ alert(r.error||'删除失败'); }
+    }catch(e){ alert('删除失败: '+e.message); }
+}
+
+init();
+</script>
+<script src="/js/menu.js"></script>
+</body>
+</html>

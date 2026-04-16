@@ -27,7 +27,7 @@ h1{margin-bottom:20px}
 </style>
 </head>
 <body>
-<a href="/" class="back">← 返回首页</a>
+<button class="btn btn-secondary" onclick="window.location.href='/'">← 返回首页</button>
 <h1>🎙️ 录音文件管理</h1>
 <div class="card">
 <button class="btn btn-secondary" onclick="loadRecordings()">刷新</button>
@@ -64,6 +64,7 @@ async function loadRecordings(){
                     <td>${s.status}</td>
                     <td>${s.created_at||'-'}</td>
                     <td>
+                        <button class="btn btn-primary" onclick="window.location.href='/recordings/detail?id=${s.session_id}'">详情</button>
                         <button class="btn btn-primary" onclick="showEditModal('${s.session_id}','${s.audio_name||''}')">编辑</button>
                         <button class="btn btn-danger" onclick="deleteRecording('${s.session_id}')">删除</button>
                     </td>

@@ -20,7 +20,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </style>
 </head>
 <body>
-<a href="/songs"><button class="btn btn-secondary">← 返回列表</button></a>
+<button class="btn btn-secondary" onclick="window.location.href='/songs'">← 返回列表</button>
 <h1>🎵 歌曲详情</h1>
 <div class="card">
 <h3>基本信息</h3>
@@ -38,6 +38,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="audio-info" id="audioInfo"></div>
 </div>
 <div class="form-group"><label>状态</label><input type="text" id="songDetailStatus" disabled></div>
+</div>
+<div class="card" id="transcribeCard">
+<h3>转写结果</h3>
+<div id="transcribeResults">
+<div class="form-group"><label>旋律提取结果</label><div id="melodyResult" style="color:#aaa">未生成</div></div>
+<div class="form-group"><label>和弦分离结果</label><div id="chordResult" style="color:#aaa">未生成</div></div>
+</div>
+<div style="margin-top:16px">
+<button class="btn btn-primary" onclick="startTranscribe('melody')">快速提取旋律</button>
+<button class="btn btn-primary" onclick="startTranscribe('chord')">快速分离和弦</button>
+<button id="historyLink" class="btn btn-secondary" style="margin-left:12px" onclick="goHistory()">查看转写历史</button>
+</div>
+<div id="transcribeStatus" style="margin-top:12px;display:none">
+<p id="transcribeStatusText" style="color:#f39c12">正在提交...</p>
+</div>
 </div>
 <div class="card">
 <h3>操作</h3>
@@ -75,6 +90,17 @@ async function loadSongDetail(id){
         }
         
         loadArtistsForSongDetail();
+
+        // 转写结果展示
+        document.getElementById('historyLink').dataset.songId = id;
+        if(r.melody_url||r.melody_path){
+            const link=r.melody_url||r.melody_path;
+            document.getElementById('melodyResult').innerHTML='<a href="'+API_BASE+link+'" download style="color:#4ecdc4">下载旋律结果</a> <span style="color:#888;font-size:12px">('+link+')</span>';
+        }
+        if(r.chord_url||r.chord_path){
+            const link=r.chord_url||r.chord_path;
+            document.getElementById('chordResult').innerHTML='<a href="'+API_BASE+link+'" download style="color:#4ecdc4">下载和弦结果</a> <span style="color:#888;font-size:12px">('+link+')</span>';
+        }
     }catch(e){alert(e.message);}
 }
 async function loadArtistsForSongDetail(){
@@ -96,6 +122,36 @@ async function saveSongDetail(){
         if(r.ok){alert('保存成功');window.location.href='/songs';}else{alert(r.error||'保存失败');}
     }catch(e){alert(e.message);}
 }
+async function startTranscribe(mode){
+    if(!currentSongId)return;
+    const statusDiv=document.getElementById('transcribeStatus');
+    const statusText=document.getElementById('transcribeStatusText');
+    statusDiv.style.display='block';
+    statusText.textContent='正在提交'+(mode==='melody'?'旋律提取':'和弦分离')+'任务...';
+    try{
+        const r=await fetch(API_BASE+'/api/transcribe/start',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({song_id:currentSongId,mode:mode})
+        }).then(x=>x.json());
+        if(r.ok){
+            statusText.style.color='#27ae60';
+            statusText.textContent='任务已提交，任务ID: '+r.task_id+'。可前往转写历史查看进度。';
+        }else{
+            statusText.style.color='#e74c3c';
+            statusText.textContent='提交失败: '+(r.error||'未知错误');
+        }
+    }catch(e){
+        statusText.style.color='#e74c3c';
+        statusText.textContent='提交失败: '+e.message;
+    }
+}
+
+function goHistory(){
+    if(!currentSongId)return;
+    window.location.href='/transcribe/history?song_id='+currentSongId;
+}
+
 async function deleteSongDetail(){
     if(!confirm('确定删除这首歌？'))return;
     try{
