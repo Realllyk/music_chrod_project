@@ -142,7 +142,9 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         self.fmax = self.config.get('fmax', 1047)
         self.window_size = self.config.get('window_size', 7)
         self.confidence_threshold = self.config.get('confidence_threshold', 0.5)
-        self.min_note_duration = self.config.get('min_note_duration', 0.08)
+        self.min_note_duration = self.config.get('min_note_duration', 0.12)
+        self.midi_median_kernel_size = self.config.get('midi_median_kernel_size', 7)
+        self.merge_gap_threshold = self.config.get('merge_gap_threshold', 0.10)
     
     def _load_melody_config(self) -> Dict:
         config_path = Path(__file__).resolve().parents[2] / 'config.json'
@@ -226,6 +228,27 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         logger.info("基频平滑完成")
         return smoothed
     
+    def merge_adjacent_same_notes(self, notes: List[Dict], gap_threshold: float) -> List[Dict]:
+        """合并间隔很短的相邻同音符。"""
+        if not notes:
+            return []
+
+        merged = [notes[0].copy()]
+        for note in notes[1:]:
+            prev = merged[-1]
+            prev_end = prev['start_frame'] * self.hop_length / self.sr + prev['duration']
+            current_start = note['start_frame'] * self.hop_length / self.sr
+            gap = current_start - prev_end
+
+            if prev['midi'] == note['midi'] and gap < gap_threshold:
+                prev['end_frame'] = note['end_frame']
+                prev['duration'] = (note['end_frame'] - prev['start_frame']) * self.hop_length / self.sr
+                prev['confidence'] = max(prev.get('confidence', 0), note.get('confidence', 0))
+            else:
+                merged.append(note.copy())
+
+        return merged
+
     def pitch_to_notes(self, cent_threshold: float = 50) -> List[Dict]:
         """
         将基频转换为音符
@@ -236,7 +259,11 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         Returns:
             音符列表
         """
-        logger.info(f"将基频转换为音符... confidence_threshold={self.confidence_threshold}, min_note_duration={self.min_note_duration}")
+        logger.info(
+            f"将基频转换为音符... confidence_threshold={self.confidence_threshold}, "
+            f"min_note_duration={self.min_note_duration}, midi_median_kernel_size={self.midi_median_kernel_size}, "
+            f"merge_gap_threshold={self.merge_gap_threshold}"
+        )
         
         if self.pitch is None:
             raise ValueError("请先提取基频")
@@ -244,59 +271,79 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         # A4 = 440 Hz 作为参考
         A4_freq = 440
         A4_midi = 69
-        
-        notes = []
-        current_note = None
-        current_start = 0
-        
+
+        midi_sequence = np.zeros(len(self.pitch), dtype=float)
+        freq_sequence = np.zeros(len(self.pitch), dtype=float)
+        confidence_sequence = np.zeros(len(self.pitch), dtype=float)
+
         for i, freq in enumerate(self.pitch):
             confidence = self.confidence[i] if self.confidence is not None else 0.8
-            if freq <= 0 or confidence < self.confidence_threshold:  # 无声或低置信度
+            if freq > 0 and confidence >= self.confidence_threshold:
+                midi_sequence[i] = round(A4_midi + 12 * np.log2(freq / A4_freq))
+                freq_sequence[i] = freq
+                confidence_sequence[i] = confidence
+
+        voiced_mask = midi_sequence > 0
+        voiced_count = int(np.sum(voiced_mask))
+        if np.any(voiced_mask):
+            voiced_midi = midi_sequence[voiced_mask]
+            kernel_size = int(self.midi_median_kernel_size)
+            if kernel_size % 2 == 0:
+                kernel_size += 1
+            if kernel_size > len(voiced_midi):
+                kernel_size = len(voiced_midi) if len(voiced_midi) % 2 == 1 else max(1, len(voiced_midi) - 1)
+            if kernel_size >= 3:
+                midi_sequence[voiced_mask] = signal.medfilt(voiced_midi, kernel_size=kernel_size)
+
+        logger.info(f"MIDI 序列中值滤波完成，有声帧数={voiced_count}")
+
+        notes = []
+        current_note = None
+
+        for i, midi_value in enumerate(midi_sequence):
+            if midi_value <= 0:
                 if current_note is not None:
-                    # 保存当前音符
                     current_note['end_frame'] = i
                     current_note['duration'] = (i - current_note['start_frame']) * self.hop_length / self.sr
                     notes.append(current_note)
                     current_note = None
-            else:
-                # 频率转 MIDI 音号
-                midi = A4_midi + 12 * np.log2(freq / A4_freq)
-                midi_rounded = round(midi)  # 量化到最近的半音
-                
-                if current_note is None:
-                    # 开始新音符
-                    current_note = {
-                        'start_frame': i,
-                        'midi': midi_rounded,
-                        'freq': freq,
-                        'confidence': confidence
-                    }
-                elif current_note['midi'] != midi_rounded:
-                    # 音符改变
-                    current_note['end_frame'] = i
-                    current_note['duration'] = (i - current_note['start_frame']) * self.hop_length / self.sr
-                    notes.append(current_note)
-                    
-                    current_note = {
-                        'start_frame': i,
-                        'midi': midi_rounded,
-                        'freq': freq,
-                        'confidence': confidence
-                    }
-        
-        # 保存最后一个音符
+                continue
+
+            if current_note is None:
+                current_note = {
+                    'start_frame': i,
+                    'midi': int(midi_value),
+                    'freq': float(freq_sequence[i]) if freq_sequence[i] > 0 else 0.0,
+                    'confidence': float(confidence_sequence[i]) if confidence_sequence[i] > 0 else 0.8
+                }
+            elif current_note['midi'] != int(midi_value):
+                current_note['end_frame'] = i
+                current_note['duration'] = (i - current_note['start_frame']) * self.hop_length / self.sr
+                notes.append(current_note)
+                current_note = {
+                    'start_frame': i,
+                    'midi': int(midi_value),
+                    'freq': float(freq_sequence[i]) if freq_sequence[i] > 0 else 0.0,
+                    'confidence': float(confidence_sequence[i]) if confidence_sequence[i] > 0 else 0.8
+                }
+
         if current_note is not None:
-            current_note['end_frame'] = len(self.pitch)
-            current_note['duration'] = (len(self.pitch) - current_note['start_frame']) * self.hop_length / self.sr
+            current_note['end_frame'] = len(midi_sequence)
+            current_note['duration'] = (len(midi_sequence) - current_note['start_frame']) * self.hop_length / self.sr
             notes.append(current_note)
 
         raw_note_count = len(notes)
         notes = [note for note in notes if note.get('duration', 0) >= self.min_note_duration]
-        filtered_count = raw_note_count - len(notes)
-        
-        self.notes = notes
-        logger.info(f"识别音符数: 原始={raw_note_count}, 过滤后={len(notes)}, 过滤掉过短音符={filtered_count}")
-        return notes
+        short_filtered_count = raw_note_count - len(notes)
+        merged_notes = self.merge_adjacent_same_notes(notes, self.merge_gap_threshold)
+        merge_reduced_count = len(notes) - len(merged_notes)
+
+        self.notes = merged_notes
+        logger.info(
+            f"识别音符数: 原始={raw_note_count}, 过滤后={len(notes)}, 合并后={len(merged_notes)}, "
+            f"过滤掉过短音符={short_filtered_count}, 合并减少={merge_reduced_count}"
+        )
+        return merged_notes
     
     def notes_to_dict(self) -> Dict:
         """将音符转换为字典格式"""

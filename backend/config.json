@@ -30,7 +30,9 @@
       "hop_length": 512,
       "window_size": 7,
       "confidence_threshold": 0.5,
-      "min_note_duration": 0.08
+      "min_note_duration": 0.12,
+      "midi_median_kernel_size": 7,
+      "merge_gap_threshold": 0.10
     },
     "polyphonic": {
       "n_voices": 2,
