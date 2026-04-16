@@ -35,11 +35,10 @@
       "hpss_margin": 4.0
     },
     "algorithm": {
-      "melody": "demucs",
       "chord": "librosa"
     },
     "vocal_separation": {
-      "provider": "librosa",
+      "provider": "demucs",
       "fallback_order": ["spleeter", "librosa"],
       "demucs": {
         "model_name": "htdemucs",

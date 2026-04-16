@@ -22,7 +22,6 @@ with open(_config_path) as f:
 
 ALGORITHM_CONFIG = _config.get('transcription', {}).get('algorithm', {})
 VOCAL_SEPARATION_CONFIG = _config.get('transcription', {}).get('vocal_separation', {})
-DEFAULT_MELODY_ALGO = ALGORITHM_CONFIG.get('melody', 'librosa')
 DEFAULT_CHORD_ALGO = ALGORITHM_CONFIG.get('chord', 'librosa')
 DEFAULT_VOCAL_PROVIDER = VOCAL_SEPARATION_CONFIG.get('provider', 'demucs')
 VOCAL_FALLBACK_ORDER = VOCAL_SEPARATION_CONFIG.get('fallback_order', ['spleeter', 'librosa'])
@@ -197,17 +196,15 @@ def run_transcription(task_id, song_id, mode):
         full_audio_path = download_file(audio_path)
         logger.info(f"[task_id={task_id}] 原始音频下载完成: {full_audio_path}")
 
-        # 从配置读取算法
-        algo = DEFAULT_MELODY_ALGO if mode == 'melody' else DEFAULT_CHORD_ALGO
-        if algo not in ALLOWED_ALGOS:
-            raise ValueError(f'Unsupported transcription algorithm: {algo}')
-
         # 根据配置选择实现类
         if mode == 'melody':
             transcriber = _create_melody_transcriber()
             logger.info(f"[task_id={task_id}] 开始旋律提取")
             result = transcriber.extract_melody(full_audio_path)
         else:
+            algo = DEFAULT_CHORD_ALGO
+            if algo not in ALLOWED_ALGOS:
+                raise ValueError(f'Unsupported transcription algorithm: {algo}')
             transcriber = _create_chord_transcriber(algo)
             logger.info(f"[task_id={task_id}] 开始和弦提取")
             result = transcriber.extract_chords(full_audio_path)
