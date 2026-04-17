@@ -145,6 +145,10 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         self.min_note_duration = self.config.get('min_note_duration', 0.12)
         self.midi_median_kernel_size = self.config.get('midi_median_kernel_size', 7)
         self.merge_gap_threshold = self.config.get('merge_gap_threshold', 0.10)
+        self.pitch_backend = self.config.get('pitch_backend', 'crepe')
+        self.crepe_model_capacity = self.config.get('crepe_model_capacity', 'medium')
+        self.crepe_viterbi = self.config.get('crepe_viterbi', True)
+        self.tempo = self.config.get('default_tempo', 120)
     
     def _load_melody_config(self) -> Dict:
         config_path = Path(__file__).resolve().parents[2] / 'config.json'
@@ -194,6 +198,51 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         logger.info(f"基频提取完成，有效基频点: {np.sum(f0 > 0)}/{len(f0)}")
         return f0, voiced_probs
     
+    def extract_pitch_crepe(self) -> Tuple[np.ndarray, np.ndarray]:
+        """使用 CREPE 算法提取基频。"""
+        logger.info(
+            f"使用 CREPE 提取基频... model_capacity={self.crepe_model_capacity}, viterbi={self.crepe_viterbi}"
+        )
+
+        try:
+            import crepe
+        except ImportError as e:
+            raise RuntimeError('crepe not installed') from e
+
+        time, frequency, confidence, _ = crepe.predict(
+            self.audio,
+            self.sr,
+            model_capacity=self.crepe_model_capacity,
+            viterbi=self.crepe_viterbi,
+            verbose=0,
+        )
+
+        target_times = np.arange(0, len(self.audio) / self.sr, self.hop_length / self.sr)
+        frequency = np.nan_to_num(frequency, nan=0.0)
+        confidence = np.nan_to_num(confidence, nan=0.0)
+        frequency_resampled = np.interp(target_times, time, frequency, left=0.0, right=0.0)
+        confidence_resampled = np.interp(target_times, time, confidence, left=0.0, right=0.0)
+        frequency_resampled[confidence_resampled < self.confidence_threshold] = 0.0
+
+        if self.fmin:
+            frequency_resampled[frequency_resampled < self.fmin] = 0.0
+        if self.fmax:
+            frequency_resampled[frequency_resampled > self.fmax] = 0.0
+
+        self.pitch = frequency_resampled
+        self.confidence = confidence_resampled
+        logger.info(f"CREPE 基频提取完成，有效基频点: {np.sum(frequency_resampled > 0)}/{len(frequency_resampled)}")
+        return frequency_resampled, confidence_resampled
+
+    def detect_tempo(self) -> float:
+        """检测音频 BPM。"""
+        tempo, _ = librosa.beat.beat_track(y=self.audio, sr=self.sr, hop_length=self.hop_length)
+        if hasattr(tempo, '__len__'):
+            tempo = float(tempo[0]) if len(tempo) else float(self.tempo)
+        self.tempo = float(tempo) if tempo else float(self.tempo)
+        logger.info(f"检测到 BPM: {self.tempo}")
+        return self.tempo
+
     def smooth_pitch(self, window_size: int = 5) -> np.ndarray:
         """
         平滑基频曲线（移动平均）
@@ -366,48 +415,38 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         if self.notes is None or len(self.notes) == 0:
             logger.warning("没有音符，无法生成 MIDI")
             return
-        
+
         try:
-            from music21 import stream, note, instrument
+            import pretty_midi
         except ImportError:
-            logger.error("需要安装 music21: pip install music21")
+            logger.error("需要安装 pretty_midi: pip install pretty_midi")
             return
-        
-        logger.info(f"生成 MIDI 文件: {output_path}")
-        
-        # 创建乐谱
-        s = stream.Score()
-        part = stream.Part()
-        part.instrument = instrument.fromString("piano")
-        
-        # 添加音符
+
+        logger.info(f"生成 MIDI 文件: {output_path}, tempo={self.tempo}")
+
+        midi = pretty_midi.PrettyMIDI(initial_tempo=float(self.tempo))
+        instrument = pretty_midi.Instrument(program=0, name='Melody')
+
         for note_info in self.notes:
-            midi_num = note_info['midi']
-            duration = note_info['duration']
-            
-            # 音符时值（简化处理）
-            if duration < 0.25:
-                quarter_length = 0.25
-            elif duration < 0.5:
-                quarter_length = 0.5
-            elif duration < 1:
-                quarter_length = 1
-            else:
-                quarter_length = duration
-            
-            # 创建音符对象
-            n = note.Note(midi=midi_num)
-            n.quarterLength = quarter_length
-            part.append(n)
-        
-        s.append(part)
-        
-        # 保存文件
+            start_time = note_info['start_frame'] * self.hop_length / self.sr
+            end_time = start_time + note_info['duration']
+            if end_time <= start_time:
+                continue
+            midi_note = pretty_midi.Note(
+                velocity=100,
+                pitch=int(note_info['midi']),
+                start=float(start_time),
+                end=float(end_time),
+            )
+            instrument.notes.append(midi_note)
+
+        midi.instruments.append(instrument)
+
         if output_path:
-            s.write('midi', fp=output_path)
-            logger.info(f"MIDI 文件已保存: {output_path}")
-        
-        return s
+            midi.write(output_path)
+            logger.info(f"MIDI 文件已保存: {output_path}, tempo={self.tempo}")
+
+        return midi
     
     def extract_melody(self, audio_path: str) -> Dict:
         """提取单旋律"""
@@ -428,15 +467,21 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
             self.load_audio(audio_path)
             
             # 2. 提取基频
-            self.extract_pitch_pyin()
+            if self.pitch_backend == 'crepe':
+                self.extract_pitch_crepe()
+            else:
+                self.extract_pitch_pyin()
             
             # 3. 平滑基频
             self.smooth_pitch(window_size=self.window_size)
             
-            # 4. 转换为音符
+            # 4. 检测 BPM
+            self.detect_tempo()
+
+            # 5. 转换为音符
             self.pitch_to_notes()
             
-            # 5. 返回结果
+            # 6. 返回结果
             result = self.notes_to_dict()
             logger.info(f"扒谱完成: {result['total_notes']} 个音符")
             
