@@ -145,9 +145,10 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         self.min_note_duration = self.config.get('min_note_duration', 0.12)
         self.midi_median_kernel_size = self.config.get('midi_median_kernel_size', 7)
         self.merge_gap_threshold = self.config.get('merge_gap_threshold', 0.10)
-        self.pitch_backend = self.config.get('pitch_backend', 'crepe')
-        self.crepe_model_capacity = self.config.get('crepe_model_capacity', 'medium')
-        self.crepe_viterbi = self.config.get('crepe_viterbi', True)
+        self.pitch_backend = self.config.get('pitch_backend', 'torchcrepe')
+        self.torchcrepe_model = self.config.get('torchcrepe_model', 'full')
+        self.torchcrepe_batch_size = self.config.get('torchcrepe_batch_size', 2048)
+        self.torchcrepe_viterbi = self.config.get('torchcrepe_viterbi', True)
         self.tempo = self.config.get('default_tempo', 120)
     
     def _load_melody_config(self) -> Dict:
@@ -198,41 +199,52 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         logger.info(f"基频提取完成，有效基频点: {np.sum(f0 > 0)}/{len(f0)}")
         return f0, voiced_probs
     
-    def extract_pitch_crepe(self) -> Tuple[np.ndarray, np.ndarray]:
-        """使用 CREPE 算法提取基频。"""
+    def extract_pitch_torchcrepe(self) -> Tuple[np.ndarray, np.ndarray]:
+        """使用 torchcrepe 算法提取基频。"""
         logger.info(
-            f"使用 CREPE 提取基频... model_capacity={self.crepe_model_capacity}, viterbi={self.crepe_viterbi}"
+            f"使用 torchcrepe 提取基频... model={self.torchcrepe_model}, "
+            f"batch_size={self.torchcrepe_batch_size}, viterbi={self.torchcrepe_viterbi}"
         )
 
         try:
-            import crepe
+            import torch
+            import torchcrepe
         except ImportError as e:
-            raise RuntimeError('crepe not installed') from e
+            raise RuntimeError('torchcrepe not installed') from e
 
-        time, frequency, confidence, _ = crepe.predict(
-            self.audio,
-            self.sr,
-            model_capacity=self.crepe_model_capacity,
-            viterbi=self.crepe_viterbi,
-            verbose=0,
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        audio = torch.tensor(self.audio, dtype=torch.float32).unsqueeze(0).to(device)
+
+        decoder = torchcrepe.decode.viterbi if self.torchcrepe_viterbi else None
+        pitch, periodicity = torchcrepe.predict(
+            audio,
+            sample_rate=self.sr,
+            hop_length=self.hop_length,
+            fmin=float(self.fmin),
+            fmax=float(self.fmax),
+            model=self.torchcrepe_model,
+            batch_size=int(self.torchcrepe_batch_size),
+            device=device,
+            decoder=decoder,
+            return_periodicity=True,
         )
 
-        target_times = np.arange(0, len(self.audio) / self.sr, self.hop_length / self.sr)
+        if self.torchcrepe_viterbi:
+            periodicity = torchcrepe.filter.median(periodicity, 3)
+            pitch = torchcrepe.filter.mean(pitch, 3)
+
+        frequency = pitch.squeeze(0).detach().cpu().numpy()
+        confidence = periodicity.squeeze(0).detach().cpu().numpy()
         frequency = np.nan_to_num(frequency, nan=0.0)
         confidence = np.nan_to_num(confidence, nan=0.0)
-        frequency_resampled = np.interp(target_times, time, frequency, left=0.0, right=0.0)
-        confidence_resampled = np.interp(target_times, time, confidence, left=0.0, right=0.0)
-        frequency_resampled[confidence_resampled < self.confidence_threshold] = 0.0
+        frequency[confidence < self.confidence_threshold] = 0.0
+        frequency[frequency < self.fmin] = 0.0
+        frequency[frequency > self.fmax] = 0.0
 
-        if self.fmin:
-            frequency_resampled[frequency_resampled < self.fmin] = 0.0
-        if self.fmax:
-            frequency_resampled[frequency_resampled > self.fmax] = 0.0
-
-        self.pitch = frequency_resampled
-        self.confidence = confidence_resampled
-        logger.info(f"CREPE 基频提取完成，有效基频点: {np.sum(frequency_resampled > 0)}/{len(frequency_resampled)}")
-        return frequency_resampled, confidence_resampled
+        self.pitch = frequency
+        self.confidence = confidence
+        logger.info(f"torchcrepe 基频提取完成，有效基频点: {np.sum(frequency > 0)}/{len(frequency)}")
+        return frequency, confidence
 
     def detect_tempo(self) -> float:
         """检测音频 BPM。"""
@@ -467,8 +479,8 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
             self.load_audio(audio_path)
             
             # 2. 提取基频
-            if self.pitch_backend == 'crepe':
-                self.extract_pitch_crepe()
+            if self.pitch_backend == 'torchcrepe':
+                self.extract_pitch_torchcrepe()
             else:
                 self.extract_pitch_pyin()
             

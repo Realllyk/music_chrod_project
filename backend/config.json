@@ -25,7 +25,7 @@
   },
   "transcription": {
     "melody": {
-      "pitch_backend": "crepe",
+      "pitch_backend": "torchcrepe",
       "fmin": 65,
       "fmax": 1047,
       "hop_length": 512,
@@ -34,8 +34,9 @@
       "min_note_duration": 0.12,
       "midi_median_kernel_size": 7,
       "merge_gap_threshold": 0.10,
-      "crepe_model_capacity": "medium",
-      "crepe_viterbi": true,
+      "torchcrepe_model": "full",
+      "torchcrepe_batch_size": 2048,
+      "torchcrepe_viterbi": true,
       "default_tempo": 120
     },
     "polyphonic": {
