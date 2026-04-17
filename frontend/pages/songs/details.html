@@ -95,7 +95,10 @@ async function loadSongDetail(id){
         document.getElementById('historyLink').dataset.songId = id;
         if(r.melody_url||r.melody_path){
             const link=r.melody_url||r.melody_path;
-            document.getElementById('melodyResult').innerHTML='<a href="'+API_BASE+link+'" download style="color:#4ecdc4">下载旋律结果</a> <span style="color:#888;font-size:12px">('+link+')</span>';
+            const melodyEl=document.getElementById('melodyResult');
+            melodyEl.style.color='';
+            melodyEl.innerHTML='<a class="btn btn-primary" style="display:inline-block;text-decoration:none" href="/songs/melody?song_id='+encodeURIComponent(id)+'">查看旋律简谱</a>'
+                +'<a class="btn btn-secondary" style="display:inline-block;text-decoration:none" href="'+API_BASE+link+'" download>下载 MID</a>';
         }
         if(r.chord_url||r.chord_path){
             const link=r.chord_url||r.chord_path;

@@ -12,6 +12,7 @@ import logging
 from pathlib import Path
 from flask import Blueprint, request, jsonify
 from services.songs_service import SongsService
+from services.melody_analysis_service import MelodyAnalysisService
 from database import get_db
 from utils.aliyun_oss import download_file, upload_file
 
@@ -247,6 +248,20 @@ def run_transcription(task_id, song_id, mode):
 
         update_data['status'] = 'completed'
         SongsService.update_song(song_id, update_data)
+
+        if mode == 'melody':
+            logger.info(f"[task_id={task_id}] 开始构建旋律分析缓存")
+            analysis_payload = MelodyAnalysisService.build_melody_analysis(midi_path)
+            melody_key = f"melody_{song_id}_{task_id[-8:]}"
+            saved = SongsService.save_melody_analysis(
+                song_id=song_id,
+                analysis_payload=analysis_payload,
+                midi_path=result_path,
+                melody_key=melody_key,
+            )
+            if not saved:
+                raise RuntimeError('Failed to save melody analysis cache')
+            logger.info(f"[task_id={task_id}] 旋律分析缓存已写入, melody_key={melody_key}")
 
         # 更新任务状态
         update_task(task_id, 'completed', result_path=result_path)

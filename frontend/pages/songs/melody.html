@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>旋律简谱</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;margin:0;padding:20px;color:#222}
+.card{background:#fff;border-radius:12px;padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.05)}
+.btn{padding:10px 20px;border:none;border-radius:8px;font-size:14px;cursor:pointer;margin-right:10px;display:inline-block;text-decoration:none}
+.btn-primary{background:#4ecdc4;color:#fff}
+.btn-secondary{background:#95a5a6;color:#fff}
+.page-header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+.page-title{margin:0;font-size:24px}
+.info-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.info-item{background:#fafafa;border:1px solid #eee;border-radius:10px;padding:12px 14px}
+.info-item .label{display:block;font-size:12px;color:#888;margin-bottom:4px}
+.info-item .value{font-size:18px;font-weight:600}
+.info-item .muted{font-size:12px;color:#999;margin-top:4px}
+.state{padding:36px 20px;text-align:center;color:#888}
+.state.error{color:#e74c3c}
+.state .desc{margin-top:6px;font-size:14px}
+.state .btn{margin-top:16px}
+.measure-grid{display:grid;gap:14px}
+.measure-card{border:1px solid #eee;border-radius:10px;padding:14px 16px;background:#fafafa}
+.measure-title{font-size:12px;color:#888;margin-bottom:10px}
+.measure-notes{display:flex;flex-wrap:wrap;gap:14px 18px;align-items:flex-end;min-height:40px}
+.degree{position:relative;display:inline-flex;align-items:flex-start;font-size:24px;line-height:1;padding:6px 2px;cursor:help}
+.degree sup{font-size:12px;line-height:1;color:#666;margin-right:1px;top:0}
+.degree.rest{color:#bbb;cursor:default}
+.degree.oct1::before,.degree.oct2::before,.degree.oct3::before{content:'';position:absolute;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:#333}
+.degree.oct1::before{top:-2px}
+.degree.oct2::before{top:-2px;box-shadow:0 -7px 0 #333}
+.degree.oct3::before{top:-2px;box-shadow:0 -7px 0 #333,0 -14px 0 #333}
+.degree.oct-1::after,.degree.oct-2::after,.degree.oct-3::after{content:'';position:absolute;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:#333}
+.degree.oct-1::after{bottom:-2px}
+.degree.oct-2::after{bottom:-2px;box-shadow:0 7px 0 #333}
+.degree.oct-3::after{bottom:-2px;box-shadow:0 7px 0 #333,0 14px 0 #333}
+.note-meta{display:block;font-size:12px;color:#999;margin-top:4px}
+@media (max-width:640px){
+  body{padding:16px}
+  .card{padding:18px}
+  .page-title{font-size:20px}
+  .degree{font-size:22px}
+}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <button class="btn btn-secondary" onclick="goBack()">← 返回歌曲详情</button>
+  <h1 id="pageTitle" class="page-title">🎼 旋律简谱</h1>
+</div>
+
+<div id="infoCard" class="card" style="display:none">
+  <div class="info-bar">
+    <div class="info-item"><span class="label">调</span><span class="value" id="metaKey">-</span></div>
+    <div class="info-item"><span class="label">拍号</span><span class="value" id="metaTimeSignature">-</span></div>
+    <div class="info-item"><span class="label">BPM</span><span class="value" id="metaBpm">-</span></div>
+    <div class="info-item"><span class="label">置信度</span><span class="value" id="metaConfidence">-</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <div id="stateArea" class="state">加载中…</div>
+  <div id="measureArea" class="measure-grid" style="display:none"></div>
+</div>
+
+<script>
+const API_BASE='';
+let songId='';
+
+function getSongId(){
+  const params=new URLSearchParams(window.location.search);
+  return params.get('song_id')||'';
+}
+
+function goBack(){
+  if(songId){
+    window.location.href='/songs/details?id='+encodeURIComponent(songId);
+    return;
+  }
+  window.location.href='/songs';
+}
+
+function escapeHtml(value){
+  return String(value==null?'':value).replace(/[&<>"']/g,function(char){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char];
+  });
+}
+
+function setState(title, desc, isError, actionHtml){
+  const area=document.getElementById('stateArea');
+  area.className='state'+(isError?' error':'');
+  area.innerHTML='<div>'+escapeHtml(title)+'</div>'+(desc?'<div class="desc">'+escapeHtml(desc)+'</div>':'')+(actionHtml||'');
+  area.style.display='block';
+  document.getElementById('measureArea').style.display='none';
+}
+
+function showRetry(title, desc){
+  setState(title, desc, true, '<button class="btn btn-primary" onclick="loadPage()">重试</button>');
+}
+
+function formatNumber(num, digits){
+  return typeof num==='number' && !Number.isNaN(num) ? num.toFixed(digits) : '-';
+}
+
+function formatBpm(num){
+  if(typeof num!=='number' || Number.isNaN(num))return '-';
+  return (Math.round(num*10)/10).toString();
+}
+
+function formatConfidence(num){
+  if(typeof num!=='number' || Number.isNaN(num))return '-';
+  return num.toFixed(2);
+}
+
+function degreeClass(octaveOffset){
+  if(typeof octaveOffset!=='number' || !octaveOffset)return '';
+  if(octaveOffset>3)return 'oct3';
+  if(octaveOffset<-3)return 'oct-3';
+  return 'oct'+octaveOffset;
+}
+
+function buildTooltip(note){
+  if(!note)return '';
+  const parts=[];
+  parts.push('pitch_name: '+(note.pitch_name||'-'));
+  parts.push('start: '+formatNumber(note.start,2));
+  parts.push('end: '+formatNumber(note.end,2));
+  parts.push('duration_beats: '+formatNumber(note.duration_beats,2));
+  return parts.join('\n');
+}
+
+function renderDegree(degree, note){
+  const raw=String(degree==null?'':degree).trim();
+  if(!raw || raw==='-' || raw==='0'){
+    return '<span class="degree rest" title="休止">0</span>';
+  }
+  let accidental='';
+  let number=raw;
+  if(raw[0]==='#' || raw[0]==='b'){
+    accidental=raw[0];
+    number=raw.slice(1);
+  }
+  const classes=['degree'];
+  const octClass=degreeClass(note && typeof note.octave_offset==='number' ? note.octave_offset : 0);
+  if(octClass)classes.push(octClass);
+  return '<span class="'+classes.join(' ')+'" title="'+escapeHtml(buildTooltip(note))+'">'+(accidental?'<sup>'+escapeHtml(accidental)+'</sup>':'')+escapeHtml(number)+'</span>';
+}
+
+function notesInMeasure(measure, notes){
+  if(!Array.isArray(notes))return [];
+  return notes.filter(function(note){
+    return typeof note.start==='number' && typeof measure.start==='number' && typeof measure.end==='number' && note.start>=measure.start && note.start<measure.end;
+  });
+}
+
+function renderMeasures(analysis){
+  const notation=analysis && analysis.notation ? analysis.notation : {};
+  const measures=Array.isArray(notation.measures)?notation.measures:[];
+  const notes=Array.isArray(notation.notes)?notation.notes:[];
+  const area=document.getElementById('measureArea');
+
+  if(!measures.length && !notes.length){
+    setState('暂无可展示的旋律数据','接口已返回成功，但未提供可渲染的小节或音符数据。',false,'');
+    return;
+  }
+
+  if(measures.length){
+    area.innerHTML=measures.map(function(measure){
+      const measureNotes=notesInMeasure(measure, notes);
+      const noteHtml=(Array.isArray(measure.degrees)?measure.degrees:[]).map(function(degree, index){
+        return renderDegree(degree, measureNotes[index]||null);
+      }).join('');
+      return '<div class="measure-card">'
+        +'<div class="measure-title">小节 '+(((typeof measure.index==='number'?measure.index:0)+1))+'</div>'
+        +'<div class="measure-notes">'+(noteHtml||'<span class="note-meta">该小节暂无音符</span>')+'</div>'
+        +'</div>';
+    }).join('');
+  }else{
+    area.innerHTML='<div class="measure-card"><div class="measure-title">旋律片段</div><div class="measure-notes">'
+      +notes.map(function(note){ return renderDegree(note.degree, note); }).join('')
+      +'</div></div>';
+  }
+
+  document.getElementById('stateArea').style.display='none';
+  area.style.display='grid';
+}
+
+function renderInfo(analysis, title){
+  const key=analysis.key||{};
+  const timeSignature=analysis.time_signature||{};
+  const tempo=analysis.tempo||{};
+  document.getElementById('metaKey').textContent=key.display || [key.tonic,key.mode].filter(Boolean).join(' ') || '-';
+  document.getElementById('metaTimeSignature').textContent=(timeSignature.numerator!=null && timeSignature.denominator!=null)?(timeSignature.numerator+'/'+timeSignature.denominator):'-';
+  document.getElementById('metaBpm').textContent=formatBpm(tempo.bpm);
+  document.getElementById('metaConfidence').textContent=formatConfidence(key.confidence);
+  document.getElementById('infoCard').style.display='block';
+  if(title){
+    document.getElementById('pageTitle').textContent='🎼 '+title;
+    document.title=title+' - 旋律简谱';
+  }
+}
+
+async function fetchSongTitle(){
+  try{
+    const response=await fetch(API_BASE+'/api/songs/'+encodeURIComponent(songId));
+    if(!response.ok)return '';
+    const data=await response.json();
+    return data && data.title ? data.title : '';
+  }catch(error){
+    return '';
+  }
+}
+
+async function loadPage(){
+  if(!songId){
+    setState('缺少 song_id 参数','请从歌曲详情页重新进入该页面。',true,'');
+    return;
+  }
+
+  setState('加载中…','正在获取旋律分析结果，请稍候。',false,'');
+  document.getElementById('infoCard').style.display='none';
+
+  let response;
+  try{
+    response=await fetch(API_BASE+'/api/songs/'+encodeURIComponent(songId)+'/melody-analysis');
+  }catch(error){
+    showRetry('网络异常','无法连接服务器，请检查网络后重试。');
+    return;
+  }
+
+  let payload=null;
+  try{
+    payload=await response.json();
+  }catch(error){
+    showRetry('响应解析失败','服务器返回了无法识别的数据，请稍后重试。');
+    return;
+  }
+
+  const code=payload && typeof payload.code==='number' ? payload.code : response.status;
+  const description=payload && payload.description ? payload.description : '';
+
+  if(code===404){
+    if(/melody analysis not found/i.test(description) || /melody/i.test(description)){
+      setState('该歌曲尚未生成旋律结果','请先在歌曲详情页发起旋律提取。',false,'');
+    }else{
+      setState('歌曲不存在','请确认 song_id 是否正确。',true,'');
+    }
+    return;
+  }
+
+  if(code>=500){
+    showRetry('服务器异常','旋律分析失败，请稍后重试。');
+    return;
+  }
+
+  if(code!==200){
+    showRetry('请求失败',description || ('接口返回状态码 '+code));
+    return;
+  }
+
+  const result=payload && payload.result ? payload.result : {};
+  const analysis=result.analysis || {};
+  const notation=analysis.notation || {};
+  const hasMeasures=Array.isArray(notation.measures) && notation.measures.length>0;
+  const hasNotes=Array.isArray(notation.notes) && notation.notes.length>0;
+  const title=(result.song && result.song.title) ? result.song.title : await fetchSongTitle();
+
+  renderInfo(analysis, title || '旋律简谱');
+
+  if(!hasMeasures && !hasNotes){
+    setState('暂无可展示的旋律数据','当前歌曲已有分析结果，但简谱内容为空。',false,'');
+    return;
+  }
+
+  renderMeasures(analysis);
+}
+
+function init(){
+  songId=getSongId();
+  loadPage();
+}
+
+init();
+</script>
+<script src="/js/menu.js"></script>
+</body>
+</html>

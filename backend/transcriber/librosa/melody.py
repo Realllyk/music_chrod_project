@@ -437,6 +437,7 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         logger.info(f"生成 MIDI 文件: {output_path}, tempo={self.tempo}")
 
         midi = pretty_midi.PrettyMIDI(initial_tempo=float(self.tempo))
+        midi.time_signature_changes.append(pretty_midi.TimeSignature(4, 4, 0))
         instrument = pretty_midi.Instrument(program=0, name='Melody')
 
         for note_info in self.notes:
