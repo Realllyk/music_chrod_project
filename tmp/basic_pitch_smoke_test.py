@@ -85,9 +85,6 @@ def main() -> int:
             onset_threshold=args.onset_threshold,
             frame_threshold=args.frame_threshold,
             minimum_note_length=args.minimum_note_length_ms,
-            melodia_filter=True,
-            multiple_pitch_bends=False,
-            midi_tempo=120,
         )
     except Exception as exc:
         print("[ERROR] basic-pitch 推理失败")
