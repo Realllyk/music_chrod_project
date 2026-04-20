@@ -52,6 +52,7 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         self.tempo = self.config.get('default_tempo', 120)
         self.preprocess_highpass_hz = self.config.get('preprocess_highpass_hz', 80)
         self.preprocess_normalize = self.config.get('preprocess_normalize', True)
+        self.use_pitch_channel = self.config.get('use_pitch_channel', False)
         self.onset_delta = self.config.get('onset_delta', 0.07)
         self.onset_wait = self.config.get('onset_wait', 10)
         self.onset_pre_max = self.config.get('onset_pre_max', 20)
@@ -206,6 +207,11 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
             wait=self.onset_wait,
         ).astype(int)
 
+        if not self.use_pitch_channel:
+            self.onset_frames = energy_onsets
+            logger.info(f"使用单通道能量 onset，共 {len(energy_onsets)} 个")
+            return self.onset_frames
+
         pitch_onsets = self.detect_pitch_change_onsets(
             self.midi_sequence if self.midi_sequence is not None else np.array([], dtype=float),
             self.pitch_onset_min_stable_frames,
@@ -216,7 +222,7 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         all_onsets = self._merge_close_onsets(all_onsets, self.onset_merge_min_gap_frames)
         self.onset_frames = all_onsets
         logger.info(
-            f"能量 onset {len(energy_onsets)} 个，音高 onset {len(pitch_onsets)} 个，合并后 {len(all_onsets)} 个"
+            f"双通道 onset：能量 {len(energy_onsets)}，音高 {len(pitch_onsets)}，合并后 {len(all_onsets)}"
         )
         return self.onset_frames
 
