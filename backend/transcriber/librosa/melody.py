@@ -11,7 +11,6 @@ import librosa
 import numpy as np
 import pretty_midi
 import scipy.signal as signal
-import soundfile as sf
 import torch
 import torchcrepe
 from transcriber.base import MelodyTranscriberBase, AnalysisType
@@ -35,6 +34,9 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         self.confidence = None
         self.notes = None
         self.onset_frames = np.array([], dtype=int)
+        self.midi_sequence = None
+        self.freq_sequence = None
+        self.confidence_sequence = None
         self.config = self._load_melody_config()
         self.fmin = self.config.get('fmin', 65)
         self.fmax = self.config.get('fmax', 1047)
@@ -57,6 +59,8 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         self.onset_pre_avg = self.config.get('onset_pre_avg', 100)
         self.onset_post_avg = self.config.get('onset_post_avg', 100)
         self.segment_min_voiced_frames = self.config.get('segment_min_voiced_frames', 5)
+        self.pitch_onset_min_stable_frames = self.config.get('pitch_onset_min_stable_frames', 5)
+        self.onset_merge_min_gap_frames = self.config.get('onset_merge_min_gap_frames', 5)
 
     def _load_melody_config(self) -> Dict:
         config_path = Path(__file__).resolve().parents[2] / 'config.json'
@@ -152,8 +156,44 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
         logger.info(f"torchcrepe 基频提取完成，有效基频点: {np.sum(frequency > 0)}/{len(frequency)}")
         return frequency, confidence
 
+    def detect_pitch_change_onsets(self, midi_sequence: np.ndarray, min_stable_frames: int) -> np.ndarray:
+        pitch_onsets = []
+        i = 1
+        while i < len(midi_sequence):
+            prev = midi_sequence[i - 1]
+            curr = midi_sequence[i]
+
+            if curr == 0 or prev == 0 or curr == prev:
+                i += 1
+                continue
+
+            stable_count = 1
+            lookahead_end = min(i + min_stable_frames + 5, len(midi_sequence))
+            for j in range(i + 1, lookahead_end):
+                if midi_sequence[j] == curr:
+                    stable_count += 1
+                else:
+                    break
+
+            if stable_count >= min_stable_frames:
+                pitch_onsets.append(i)
+                i += stable_count
+            else:
+                i += 1
+
+        return np.array(pitch_onsets, dtype=int)
+
+    def _merge_close_onsets(self, onsets: np.ndarray, min_gap_frames: int) -> np.ndarray:
+        if len(onsets) == 0:
+            return onsets
+        merged = [int(onsets[0])]
+        for onset in onsets[1:]:
+            if int(onset) - merged[-1] >= min_gap_frames:
+                merged.append(int(onset))
+        return np.array(merged, dtype=int)
+
     def detect_onsets(self) -> np.ndarray:
-        onset_frames = librosa.onset.onset_detect(
+        energy_onsets = librosa.onset.onset_detect(
             y=self.audio,
             sr=self.sr,
             hop_length=self.hop_length,
@@ -165,9 +205,20 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
             post_avg=self.onset_post_avg,
             delta=self.onset_delta,
             wait=self.onset_wait,
+        ).astype(int)
+
+        pitch_onsets = self.detect_pitch_change_onsets(
+            self.midi_sequence if self.midi_sequence is not None else np.array([], dtype=float),
+            self.pitch_onset_min_stable_frames,
         )
-        self.onset_frames = onset_frames.astype(int)
-        logger.info(f"检测到 {len(self.onset_frames)} 个 onset")
+
+        all_onsets = np.concatenate([energy_onsets, pitch_onsets]) if len(pitch_onsets) > 0 else energy_onsets
+        all_onsets = np.unique(all_onsets.astype(int))
+        all_onsets = self._merge_close_onsets(all_onsets, self.onset_merge_min_gap_frames)
+        self.onset_frames = all_onsets
+        logger.info(
+            f"能量 onset {len(energy_onsets)} 个，音高 onset {len(pitch_onsets)} 个，合并后 {len(all_onsets)} 个"
+        )
         return self.onset_frames
 
     def detect_tempo(self) -> float:
@@ -230,6 +281,9 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
             if kernel_size >= 3:
                 midi_sequence[voiced_mask] = signal.medfilt(voiced_midi, kernel_size=kernel_size)
 
+        self.midi_sequence = midi_sequence
+        self.freq_sequence = freq_sequence
+        self.confidence_sequence = confidence_sequence
         logger.info(f"MIDI 序列中值滤波完成，有声帧数={voiced_count}")
         return midi_sequence, freq_sequence, confidence_sequence
 

@@ -46,7 +46,9 @@
       "onset_post_max": 20,
       "onset_pre_avg": 100,
       "onset_post_avg": 100,
-      "segment_min_voiced_frames": 5
+      "segment_min_voiced_frames": 5,
+      "pitch_onset_min_stable_frames": 5,
+      "onset_merge_min_gap_frames": 5
     },
     "polyphonic": {
       "n_voices": 2,
