@@ -21,8 +21,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .state.error{color:#e74c3c}
 .state .desc{margin-top:6px;font-size:14px}
 .state .btn{margin-top:16px}
-.measure-grid{display:grid;gap:14px}
-.measure-card{border:1px solid #eee;border-radius:10px;padding:14px 16px;background:#fafafa}
+.measure-grid{display:flex;flex-direction:column;gap:0}
+.measure-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-bottom:1px solid #e9e9e9}
+.measure-row:last-child{border-bottom:none}
+.measure-card{position:relative;padding:16px 18px;background:#fafafa;min-height:92px}
+.measure-card+.measure-card{border-left:2px solid #d8d8d8}
 .measure-title{font-size:12px;color:#888;margin-bottom:10px}
 .measure-notes{display:flex;flex-wrap:wrap;gap:14px 18px;align-items:flex-end;min-height:40px}
 .degree{position:relative;display:inline-flex;align-items:flex-start;font-size:24px;line-height:1;padding:6px 2px;cursor:help}
@@ -37,11 +40,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .degree.oct-2::after{bottom:-2px;box-shadow:0 7px 0 #333}
 .degree.oct-3::after{bottom:-2px;box-shadow:0 7px 0 #333,0 14px 0 #333}
 .note-meta{display:block;font-size:12px;color:#999;margin-top:4px}
+.player-bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.player-progress{color:#666;font-size:14px;min-width:110px;font-variant-numeric:tabular-nums}
+.tempo-control{display:flex;align-items:center;gap:8px;font-size:14px;color:#555;margin-left:auto}
+.tempo-control input[type=range]{width:140px}
+.degree.playing{background:#fff3b0;border-radius:4px;box-shadow:0 0 0 2px #f5c542;transition:background .08s,box-shadow .08s}
 @media (max-width:640px){
   body{padding:16px}
   .card{padding:18px}
   .page-title{font-size:20px}
+  .measure-row{grid-template-columns:1fr}
+  .measure-card+.measure-card{border-left:none;border-top:1px solid #d8d8d8}
   .degree{font-size:22px}
+  .tempo-control{margin-left:0}
 }
 </style>
 </head>
@@ -60,6 +71,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 </div>
 
+<div id="playerCard" class="card" style="display:none">
+  <div class="player-bar">
+    <button id="btnPlay" class="btn btn-primary" onclick="togglePlay()">▶ 播放</button>
+    <button id="btnStop" class="btn btn-secondary" onclick="stopPlayback()" disabled>■ 停止</button>
+    <div class="player-progress">
+      <span id="progressText">0:00 / 0:00</span>
+    </div>
+    <label class="tempo-control">
+      速度：
+      <input type="range" id="tempoSlider" min="40" max="240" step="1" oninput="onTempoChange(this.value)">
+      <span id="tempoValue">- BPM</span>
+    </label>
+  </div>
+</div>
+
 <div class="card">
   <div id="stateArea" class="state">加载中…</div>
   <div id="measureArea" class="measure-grid" style="display:none"></div>
@@ -67,7 +93,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script>
 const API_BASE='';
+const DEGREE_TO_SEMITONE_MAJOR={
+  '1':0,'#1':1,'2':2,'#2':3,'3':4,'4':5,'#4':6,'5':7,'#5':8,'6':9,'#6':10,'7':11
+};
+const DEGREE_TO_SEMITONE_MINOR={
+  '1':0,'#1':1,'2':2,'b3':3,'3':4,'4':5,'#4':6,'5':7,'b6':8,'6':9,'b7':10,'7':11
+};
+const TONIC_PC={C:0,'C#':1,Db:1,D:2,'D#':3,Eb:3,E:4,F:5,'F#':6,Gb:6,G:7,'G#':8,Ab:8,A:9,'A#':10,Bb:10,B:11};
+const BASE_OCTAVE_MIDI=60;
+
 let songId='';
+let toneReady=false;
+let synth=null;
+let scheduledIds=[];
+let playbackEvents=[];
+let currentAnalysis=null;
+let originalBpm=120;
+let totalDurationBeats=0;
+let progressRaf=0;
+let currentHighlightEl=null;
 
 function getSongId(){
   const params=new URLSearchParams(window.location.search);
@@ -131,10 +175,239 @@ function buildTooltip(note){
   return parts.join('\n');
 }
 
+function jianpuToMidi(note, keyInfo){
+  if(!note || !keyInfo)return null;
+  const degree=String(note.degree==null?'':note.degree).trim();
+  if(!degree || degree==='0' || degree==='-')return null;
+  const mode=String(keyInfo.mode||'major').toLowerCase();
+  const degreeMap=mode.includes('minor') ? DEGREE_TO_SEMITONE_MINOR : DEGREE_TO_SEMITONE_MAJOR;
+  const tonic=String(keyInfo.tonic||'C').trim();
+  const tonicPc=Object.prototype.hasOwnProperty.call(TONIC_PC, tonic) ? TONIC_PC[tonic] : 0;
+  const semitone=degreeMap[degree];
+  if(typeof semitone!=='number')return null;
+  const octaveOffset=typeof note.octave_offset==='number' ? note.octave_offset : Number(note.octave_offset) || 0;
+  return BASE_OCTAVE_MIDI + tonicPc + semitone + octaveOffset * 12;
+}
+
+function midiToFreq(midi){
+  if(typeof midi!=='number' || Number.isNaN(midi))return null;
+  return 440*Math.pow(2,(midi-69)/12);
+}
+
+async function ensureTone(){
+  if(typeof Tone==='undefined'){
+    throw new Error('Tone.js 未加载');
+  }
+  if(!toneReady){
+    await Tone.start();
+    toneReady=true;
+  }
+  if(!synth){
+    synth=new Tone.PolySynth(Tone.Synth,{volume:-8,options:{oscillator:{type:'triangle'},envelope:{attack:0.01,decay:0.05,sustain:0.5,release:0.2}}}).toDestination();
+  }
+}
+
+function beatsToBBS(totalBeats, numerator){
+  const beats=Math.max(0, Number(totalBeats)||0);
+  const beatsPerBar=Math.max(1, parseInt(numerator,10)||4);
+  const bars=Math.floor(beats/beatsPerBar);
+  const remain=beats-bars*beatsPerBar;
+  const wholeBeats=Math.floor(remain);
+  const sixteenths=Math.round((remain-wholeBeats)*4);
+  if(sixteenths>=4){
+    return (bars + Math.floor((wholeBeats+1)/beatsPerBar))+':'+((wholeBeats+1)%beatsPerBar)+':0';
+  }
+  return bars+':'+wholeBeats+':'+sixteenths;
+}
+
+function highlightEl(el){
+  if(currentHighlightEl===el)return;
+  clearHighlight();
+  if(el){
+    el.classList.add('playing');
+    currentHighlightEl=el;
+  }
+}
+
+function clearHighlight(){
+  if(currentHighlightEl){
+    currentHighlightEl.classList.remove('playing');
+    currentHighlightEl=null;
+  }
+}
+
+function formatTime(sec){
+  const totalSeconds=Math.max(0, Math.floor(Number(sec)||0));
+  const minutes=Math.floor(totalSeconds/60);
+  const seconds=totalSeconds%60;
+  return minutes+':'+String(seconds).padStart(2,'0');
+}
+
+function updateProgressDisplay(elapsedBeats){
+  const bpm=(toneReady && typeof Tone!=='undefined' && Tone.Transport && Tone.Transport.bpm) ? Tone.Transport.bpm.value : originalBpm;
+  const safeBpm=Math.max(1, Number(bpm)||originalBpm||120);
+  const currentSeconds=(Math.max(0, Number(elapsedBeats)||0)*60)/safeBpm;
+  const totalSeconds=(Math.max(0, totalDurationBeats)*60)/safeBpm;
+  document.getElementById('progressText').textContent=formatTime(currentSeconds)+' / '+formatTime(totalSeconds);
+}
+
+function tickProgress(){
+  if(progressRaf){
+    cancelAnimationFrame(progressRaf);
+    progressRaf=0;
+  }
+  if(!(toneReady && typeof Tone!=='undefined'))return;
+  const loop=function(){
+    if(!Tone.Transport || Tone.Transport.state!=='started'){
+      progressRaf=0;
+      return;
+    }
+    const elapsedBeats=Tone.Transport.seconds*Tone.Transport.bpm.value/60;
+    updateProgressDisplay(elapsedBeats);
+    progressRaf=requestAnimationFrame(loop);
+  };
+  loop();
+}
+
+function buildScheduleAndPlay(analysis){
+  if(!(analysis && analysis.notation && Array.isArray(analysis.notation.notes)))return false;
+  const notes=analysis.notation.notes;
+  const numerator=analysis.time_signature && analysis.time_signature.numerator ? analysis.time_signature.numerator : 4;
+  playbackEvents=[];
+  scheduledIds.forEach(function(id){
+    Tone.Transport.clear(id);
+  });
+  scheduledIds=[];
+  Tone.Transport.cancel();
+
+  let fallbackBeat=0;
+  playbackEvents=notes.map(function(note){
+    const startBeat=typeof note.start==='number' && typeof originalBpm==='number' ? (note.start*originalBpm/60) : fallbackBeat;
+    const durBeat=Math.max(Number(note.duration_beats)||0, 0.25);
+    fallbackBeat=Math.max(fallbackBeat, startBeat+durBeat);
+    const noteIndex=note && note.index!=null ? String(note.index) : '';
+    const el=noteIndex ? document.querySelector('[data-note-index="'+CSS.escape(noteIndex)+'"]') : null;
+    return {
+      note:note,
+      startBeat:startBeat,
+      durBeat:durBeat,
+      midi:jianpuToMidi(note, analysis.key||{}),
+      el:el
+    };
+  });
+
+  totalDurationBeats=playbackEvents.reduce(function(max, item){
+    return Math.max(max, item.startBeat+item.durBeat);
+  }, 0);
+
+  playbackEvents.forEach(function(item){
+    const scheduleId=Tone.Transport.schedule(function(time){
+      highlightEl(item.el);
+      if(item.midi!=null){
+        const freq=midiToFreq(item.midi);
+        const durationSeconds=(item.durBeat*60)/Math.max(1, Tone.Transport.bpm.value);
+        if(freq){
+          synth.triggerAttackRelease(freq, durationSeconds, time);
+        }
+      }
+    }, beatsToBBS(item.startBeat, numerator));
+    scheduledIds.push(scheduleId);
+  });
+
+  const stopId=Tone.Transport.schedule(function(){
+    stopPlayback();
+  }, beatsToBBS(totalDurationBeats, numerator));
+  scheduledIds.push(stopId);
+
+  Tone.Transport.position='0:0:0';
+  updateProgressDisplay(0);
+  Tone.Transport.start();
+  tickProgress();
+  return true;
+}
+
+async function togglePlay(){
+  if(!currentAnalysis)return;
+  try{
+    await ensureTone();
+  }catch(error){
+    alert(error && error.message ? error.message : '音频初始化失败');
+    return;
+  }
+
+  const btnPlay=document.getElementById('btnPlay');
+  const btnStop=document.getElementById('btnStop');
+
+  if(Tone.Transport.state==='started'){
+    Tone.Transport.pause();
+    if(progressRaf){
+      cancelAnimationFrame(progressRaf);
+      progressRaf=0;
+    }
+    btnPlay.textContent='▶ 继续';
+    btnStop.disabled=false;
+    return;
+  }
+
+  if(Tone.Transport.state==='paused'){
+    Tone.Transport.start();
+    btnPlay.textContent='⏸ 暂停';
+    btnStop.disabled=false;
+    tickProgress();
+    return;
+  }
+
+  const started=buildScheduleAndPlay(currentAnalysis);
+  if(!started)return;
+  btnPlay.textContent='⏸ 暂停';
+  btnStop.disabled=false;
+}
+
+function stopPlayback(){
+  const progressText=document.getElementById('progressText');
+  const btnPlay=document.getElementById('btnPlay');
+  const btnStop=document.getElementById('btnStop');
+
+  if(progressRaf){
+    cancelAnimationFrame(progressRaf);
+    progressRaf=0;
+  }
+
+  if(toneReady && typeof Tone!=='undefined'){
+    try{ Tone.Transport.stop(); }catch(error){}
+    scheduledIds.forEach(function(id){
+      try{ Tone.Transport.clear(id); }catch(error){}
+    });
+    scheduledIds=[];
+    try{ Tone.Transport.cancel(); }catch(error){}
+    try{ Tone.Transport.position='0:0:0'; }catch(error){}
+  }
+
+  clearHighlight();
+  playbackEvents=[];
+  updateProgressDisplay(0);
+  if(progressText && !totalDurationBeats){
+    progressText.textContent='0:00 / 0:00';
+  }
+  btnPlay.textContent='▶ 播放';
+  btnStop.disabled=true;
+}
+
+function onTempoChange(value){
+  const bpm=Math.max(40, Math.min(240, parseInt(value,10)||originalBpm||120));
+  document.getElementById('tempoSlider').value=String(bpm);
+  document.getElementById('tempoValue').textContent=bpm+' BPM';
+  if(toneReady && typeof Tone!=='undefined' && Tone.Transport && Tone.Transport.bpm){
+    Tone.Transport.bpm.value=bpm;
+  }
+  updateProgressDisplay(toneReady && typeof Tone!=='undefined' ? (Tone.Transport.seconds*Tone.Transport.bpm.value/60) : 0);
+}
+
 function renderDegree(degree, note){
   const raw=String(degree==null?'':degree).trim();
+  const noteIndexAttr=note && note.index!=null ? ' data-note-index="'+escapeHtml(note.index)+'"' : '';
   if(!raw || raw==='-' || raw==='0'){
-    return '<span class="degree rest" title="休止">0</span>';
+    return '<span class="degree rest"'+noteIndexAttr+' title="休止">0</span>';
   }
   let accidental='';
   let number=raw;
@@ -145,7 +418,7 @@ function renderDegree(degree, note){
   const classes=['degree'];
   const octClass=degreeClass(note && typeof note.octave_offset==='number' ? note.octave_offset : 0);
   if(octClass)classes.push(octClass);
-  return '<span class="'+classes.join(' ')+'" title="'+escapeHtml(buildTooltip(note))+'">'+(accidental?'<sup>'+escapeHtml(accidental)+'</sup>':'')+escapeHtml(number)+'</span>';
+  return '<span class="'+classes.join(' ')+'"'+noteIndexAttr+' title="'+escapeHtml(buildTooltip(note))+'">'+(accidental?'<sup>'+escapeHtml(accidental)+'</sup>':'')+escapeHtml(number)+'</span>';
 }
 
 function notesInMeasure(measure, notes){
@@ -155,11 +428,31 @@ function notesInMeasure(measure, notes){
   });
 }
 
+function chunkMeasures(measures, size){
+  const rows=[];
+  for(let i=0;i<measures.length;i+=size){
+    rows.push(measures.slice(i, i+size));
+  }
+  return rows;
+}
+
+function renderMeasureCard(measure, notes){
+  const measureNotes=notesInMeasure(measure, notes);
+  const noteHtml=(Array.isArray(measure.degrees)?measure.degrees:[]).map(function(degree, index){
+    return renderDegree(degree, measureNotes[index]||null);
+  }).join('');
+  return '<div class="measure-card">'
+    +'<div class="measure-title">小节 '+(((typeof measure.index==='number'?measure.index:0)+1))+'</div>'
+    +'<div class="measure-notes">'+(noteHtml||'<span class="note-meta">该小节暂无音符</span>')+'</div>'
+    +'</div>';
+}
+
 function renderMeasures(analysis){
   const notation=analysis && analysis.notation ? analysis.notation : {};
   const measures=Array.isArray(notation.measures)?notation.measures:[];
   const notes=Array.isArray(notation.notes)?notation.notes:[];
   const area=document.getElementById('measureArea');
+  const measuresPerRow=2;
 
   if(!measures.length && !notes.length){
     setState('暂无可展示的旋律数据','接口已返回成功，但未提供可渲染的小节或音符数据。',false,'');
@@ -167,30 +460,26 @@ function renderMeasures(analysis){
   }
 
   if(measures.length){
-    area.innerHTML=measures.map(function(measure){
-      const measureNotes=notesInMeasure(measure, notes);
-      const noteHtml=(Array.isArray(measure.degrees)?measure.degrees:[]).map(function(degree, index){
-        return renderDegree(degree, measureNotes[index]||null);
-      }).join('');
-      return '<div class="measure-card">'
-        +'<div class="measure-title">小节 '+(((typeof measure.index==='number'?measure.index:0)+1))+'</div>'
-        +'<div class="measure-notes">'+(noteHtml||'<span class="note-meta">该小节暂无音符</span>')+'</div>'
-        +'</div>';
+    area.innerHTML=chunkMeasures(measures, measuresPerRow).map(function(row){
+      return '<div class="measure-row">'+row.map(function(measure){
+        return renderMeasureCard(measure, notes);
+      }).join('')+'</div>';
     }).join('');
   }else{
-    area.innerHTML='<div class="measure-card"><div class="measure-title">旋律片段</div><div class="measure-notes">'
+    area.innerHTML='<div class="measure-row"><div class="measure-card"><div class="measure-title">旋律片段</div><div class="measure-notes">'
       +notes.map(function(note){ return renderDegree(note.degree, note); }).join('')
-      +'</div></div>';
+      +'</div></div></div>';
   }
 
   document.getElementById('stateArea').style.display='none';
-  area.style.display='grid';
+  area.style.display='flex';
 }
 
 function renderInfo(analysis, title){
   const key=analysis.key||{};
   const timeSignature=analysis.time_signature||{};
   const tempo=analysis.tempo||{};
+  const bpm=Math.max(40, Math.min(240, parseInt(tempo.bpm,10)||120));
   document.getElementById('metaKey').textContent=key.display || [key.tonic,key.mode].filter(Boolean).join(' ') || '-';
   document.getElementById('metaTimeSignature').textContent=(timeSignature.numerator!=null && timeSignature.denominator!=null)?(timeSignature.numerator+'/'+timeSignature.denominator):'-';
   document.getElementById('metaBpm').textContent=formatBpm(tempo.bpm);
@@ -200,6 +489,22 @@ function renderInfo(analysis, title){
     document.getElementById('pageTitle').textContent='🎼 '+title;
     document.title=title+' - 旋律简谱';
   }
+
+  currentAnalysis=analysis;
+  originalBpm=bpm;
+  totalDurationBeats=Array.isArray(analysis.notation && analysis.notation.notes)
+    ? analysis.notation.notes.reduce(function(max, note){
+        const startBeat=typeof note.start==='number' ? (note.start*originalBpm/60) : 0;
+        const durBeat=Math.max(Number(note.duration_beats)||0, 0.25);
+        return Math.max(max, startBeat+durBeat);
+      }, 0)
+    : 0;
+  document.getElementById('playerCard').style.display='block';
+  document.getElementById('tempoSlider').value=String(bpm);
+  document.getElementById('tempoValue').textContent=bpm+' BPM';
+  document.getElementById('btnPlay').textContent='▶ 播放';
+  document.getElementById('btnStop').disabled=true;
+  updateProgressDisplay(0);
 }
 
 async function fetchSongTitle(){
@@ -214,6 +519,11 @@ async function fetchSongTitle(){
 }
 
 async function loadPage(){
+  stopPlayback();
+  currentAnalysis=null;
+  totalDurationBeats=0;
+  document.getElementById('playerCard').style.display='none';
+
   if(!songId){
     setState('缺少 song_id 参数','请从歌曲详情页重新进入该页面。',true,'');
     return;
@@ -270,6 +580,7 @@ async function loadPage(){
   renderInfo(analysis, title || '旋律简谱');
 
   if(!hasMeasures && !hasNotes){
+    document.getElementById('playerCard').style.display='none';
     setState('暂无可展示的旋律数据','当前歌曲已有分析结果，但简谱内容为空。',false,'');
     return;
   }
@@ -282,8 +593,14 @@ function init(){
   loadPage();
 }
 
+window.addEventListener('beforeunload', function(){
+  try{ stopPlayback(); }catch(error){}
+  try{ if(typeof Tone!=='undefined'){ Tone.Transport.stop(); Tone.Transport.cancel(); } }catch(error){}
+});
+
 init();
 </script>
+<script src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
 <script src="/js/menu.js"></script>
 </body>
 </html>
