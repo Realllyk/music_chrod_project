@@ -158,28 +158,27 @@ class LibrosaMelodyTranscriber(MelodyTranscriberBase):
 
     def detect_pitch_change_onsets(self, midi_sequence: np.ndarray, min_stable_frames: int) -> np.ndarray:
         pitch_onsets = []
-        i = 1
-        while i < len(midi_sequence):
-            prev = midi_sequence[i - 1]
-            curr = midi_sequence[i]
+        n = len(midi_sequence)
 
-            if curr == 0 or prev == 0 or curr == prev:
-                i += 1
+        if n < min_stable_frames * 2 + 1:
+            return np.array(pitch_onsets, dtype=int)
+
+        for i in range(min_stable_frames, n - min_stable_frames):
+            prev_val = midi_sequence[i - 1]
+            curr_val = midi_sequence[i]
+
+            if curr_val == 0 or prev_val == 0 or curr_val == prev_val:
                 continue
 
-            stable_count = 1
-            lookahead_end = min(i + min_stable_frames + 5, len(midi_sequence))
-            for j in range(i + 1, lookahead_end):
-                if midi_sequence[j] == curr:
-                    stable_count += 1
-                else:
-                    break
+            pre_window = midi_sequence[i - min_stable_frames:i]
+            if not np.all(pre_window == prev_val):
+                continue
 
-            if stable_count >= min_stable_frames:
-                pitch_onsets.append(i)
-                i += stable_count
-            else:
-                i += 1
+            post_window = midi_sequence[i:i + min_stable_frames]
+            if not np.all(post_window == curr_val):
+                continue
+
+            pitch_onsets.append(i)
 
         return np.array(pitch_onsets, dtype=int)
 
