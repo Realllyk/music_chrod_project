@@ -29,35 +29,41 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <h3>提取状态</h3>
 <div id="transcribeTaskStatus"></div>
 </div>
+<script src="/js/api.js"></script>
 <script>
-const API_BASE = '';
 let transcribePollTimer=null;
 async function loadTranscribeSongs(){
     const kw=document.getElementById('transcribeSearch').value;
     try{
-        const r=await fetch(API_BASE+'/api/songs/list?keyword='+encodeURIComponent(kw)).then(x=>x.json());
+        const r=await apiGet('/api/songs/list',{keyword:kw});
         const d=document.getElementById('transcribeSongsList');
-        if(r.songs&&r.songs.length>0){
-            d.innerHTML=r.songs.map(s=>{let buttons='<button class="btn btn-primary" style="margin:2px" onclick="startTranscribe('+s.id+',\'melody\')">提取旋律</button>';buttons+='<button class="btn btn-secondary" style="margin:2px" onclick="startTranscribe('+s.id+',\'chord\')">分离和弦</button>';return'<div class="song-item"><span>'+s.title+' - '+(s.artist_name||'未知')+'</span><div>'+buttons+'</div></div>';}).join('');
+        if(r.items&&r.items.length>0){
+            d.innerHTML=r.items.map(s=>{let buttons='<button class="btn btn-primary" style="margin:2px" onclick="startTranscribe('+s.id+',\'melody\')">提取旋律</button>';buttons+='<button class="btn btn-secondary" style="margin:2px" onclick="startTranscribe('+s.id+',\'chord\')">分离和弦</button>';return'<div class="song-item"><span>'+s.title+' - '+(s.artist_name||'未知')+'</span><div>'+buttons+'</div></div>';}).join('');
         }else{d.innerHTML='<p style="color:#aaa">暂无歌曲</p>';}
     }catch(e){console.error(e);}
 }
 async function startTranscribe(songId,mode){
     try{
-        const r=await fetch(API_BASE+'/api/transcribe/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({song_id:songId,mode:mode})}).then(x=>x.json());
-        if(r.ok){document.getElementById('transcribeTaskCard').style.display='block';document.getElementById('transcribeTaskStatus').innerHTML='<p>任务已提交，正在处理...</p><p>任务ID: '+r.task_id+'</p>';startPollTask(r.task_id);}else{alert(r.error||'提交失败');}
+        const r=await apiPost('/api/transcribe/start',{song_id:songId,mode:mode});
+        document.getElementById('transcribeTaskCard').style.display='block';
+        document.getElementById('transcribeTaskStatus').innerHTML='<p>任务已提交，正在处理...</p><p>任务ID: '+r.task_id+'</p>'+(r.status?'<p>初始状态: '+r.status+'</p>':'');
+        startPollTask(r.task_id);
     }catch(e){alert(e.message);}
 }
 function startPollTask(taskId){
     if(transcribePollTimer)clearInterval(transcribePollTimer);
     transcribePollTimer=setInterval(async()=>{
+        const statusDiv=document.getElementById('transcribeTaskStatus');
         try{
-            const r=await fetch(API_BASE+'/api/transcribe/status/'+taskId).then(x=>x.json());
-            const statusDiv=document.getElementById('transcribeTaskStatus');
+            const r=await apiGet('/api/transcribe/status/'+taskId);
             if(r.status==='completed'){clearInterval(transcribePollTimer);statusDiv.innerHTML='<p style="color:green">提取完成！</p><p>结果: '+r.result_path+'</p>';}
-            else if(r.status==='failed'){clearInterval(transcribePollTimer);statusDiv.innerHTML='<p style="color:red">提取失败</p><p>错误: '+r.error+'</p>';}
+            else if(r.status==='failed'){clearInterval(transcribePollTimer);statusDiv.innerHTML='<p style="color:red">提取失败</p><p>错误: '+r['error']+'</p>';}
             else{statusDiv.innerHTML='<p>状态: '+r.status+'</p>';}
-        }catch(e){console.error(e);}
+        }catch(e){
+            console.error(e);
+            clearInterval(transcribePollTimer);
+            statusDiv.innerHTML='<p style="color:red">状态查询失败</p><p>'+e.message+'</p>';
+        }
     },3000);
 }
 loadTranscribeSongs();

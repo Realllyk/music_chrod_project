@@ -10,11 +10,15 @@ import os
 import threading
 import logging
 from pathlib import Path
-from flask import Blueprint, request, jsonify
+from flask import Blueprint
 from services.songs_service import SongsService
 from services.melody_analysis_service import MelodyAnalysisService
 from database import get_db
 from utils.aliyun_oss import download_file, upload_file
+from pojo.dto import use_dto
+from pojo.dto.transcribe_dto import StartTranscribeDTO, TranscribeTaskQueryDTO, SongTasksQueryDTO
+from pojo.vo import Result, NotFoundException, BadRequestException
+from pojo.vo.transcribe_vo import StartTranscribeVO, TranscribeTaskVO, SongTranscribeTasksVO
 
 # 加载配置
 _config_path = Path(__file__).parent.parent / 'config.json'
@@ -41,11 +45,11 @@ transcribe_controller = Blueprint('transcribe', __name__, url_prefix='/api/trans
 def create_task(song_id, mode):
     """创建任务并返回 task_id"""
     task_id = f"task_{uuid.uuid4().hex[:12]}"
-    
+
     conn = get_db()
     if not conn:
         return None
-    
+
     try:
         with conn.cursor() as cursor:
             cursor.execute(
@@ -55,7 +59,7 @@ def create_task(song_id, mode):
             conn.commit()
         return task_id
     except Exception as e:
-        print(f"创建任务失败: {e}")
+        logger.exception(f"创建任务失败: {e}")
         return None
 
 
@@ -64,7 +68,7 @@ def update_task(task_id, status, result_path=None, error=None):
     conn = get_db()
     if not conn:
         return False
-    
+
     try:
         with conn.cursor() as cursor:
             if result_path:
@@ -85,7 +89,7 @@ def update_task(task_id, status, result_path=None, error=None):
             conn.commit()
         return True
     except Exception as e:
-        print(f"更新任务失败: {e}")
+        logger.exception(f"更新任务失败: {e}")
         return False
 
 
@@ -94,37 +98,19 @@ def get_task(task_id):
     conn = get_db()
     if not conn:
         return None
-    
+
     try:
         with conn.cursor() as cursor:
             cursor.execute("SELECT * FROM transcribe_tasks WHERE task_id=%s", (task_id,))
             return cursor.fetchone()
     except Exception as e:
-        print(f"获取任务失败: {e}")
+        logger.exception(f"获取任务失败: {e}")
         return None
 
 
 # ============================================================================
 # 后台处理线程
 # ============================================================================
-
-def _serialize_task(task):
-    if not task:
-        return None
-    payload = {
-        'task_id': task.get('task_id'),
-        'song_id': task.get('song_id'),
-        'mode': task.get('mode'),
-        'status': task.get('status'),
-        'result_path': task.get('result_path'),
-        'error': task.get('error'),
-        'created_at': task.get('created_at').isoformat() if task.get('created_at') else None,
-        'updated_at': task.get('updated_at').isoformat() if task.get('updated_at') else None,
-    }
-    if task.get('vocal_stem_path'):
-        payload['vocal_stem_path'] = task.get('vocal_stem_path')
-    return payload
-
 
 def _create_melody_transcriber():
     """创建旋律提取器。优先使用人声分离方案，失败时逐级降级。"""
@@ -297,60 +283,56 @@ def run_transcription(task_id, song_id, mode):
 # ============================================================================
 
 @transcribe_controller.route('/start', methods=['POST'])
-def start_transcribe():
+@use_dto(StartTranscribeDTO)
+def start_transcribe(dto: StartTranscribeDTO):
     """启动提取任务"""
-    data = request.get_json() or {}
-    song_id = data.get('song_id')
-    mode = data.get('mode', 'melody')
-    
-    if not song_id:
-        return jsonify({'error': 'song_id is required'}), 400
-    
-    if mode not in ['melody', 'chord']:
-        return jsonify({'error': 'mode must be melody or chord'}), 400
-    
-    # 创建任务
-    task_id = create_task(song_id, mode)
+    song = SongsService.get_song_by_id(dto.song_id)
+    if not song:
+        raise NotFoundException('Song not found')
+
+    if dto.mode not in ['melody', 'chord']:
+        raise BadRequestException('mode must be melody or chord')
+
+    task_id = create_task(dto.song_id, dto.mode)
     if not task_id:
-        return jsonify({'error': 'Failed to create task'}), 500
-    
-    # 启动后台线程处理
-    thread = threading.Thread(target=run_transcription, args=(task_id, song_id, mode))
+        raise RuntimeError('Failed to create task')
+
+    thread = threading.Thread(target=run_transcription, args=(task_id, dto.song_id, dto.mode))
     thread.daemon = True
     thread.start()
-    
-    return jsonify({
-        'ok': True,
-        'task_id': task_id,
-        'message': 'Task submitted'
-    })
+
+    vo = StartTranscribeVO(task_id=task_id, status='pending')
+    return Result.success(vo).to_response()
 
 
 @transcribe_controller.route('/status/<task_id>', methods=['GET'])
-def get_task_status(task_id):
+@use_dto(TranscribeTaskQueryDTO, source='path')
+def get_task_status(dto: TranscribeTaskQueryDTO):
     """获取任务状态"""
-    task = get_task(task_id)
-    
+    task = get_task(dto.task_id)
     if not task:
-        return jsonify({'error': 'Task not found'}), 404
-    
-    return jsonify(_serialize_task(task))
+        raise NotFoundException('Task not found')
+
+    return Result.success(TranscribeTaskVO.from_domain(task)).to_response()
 
 
-@transcribe_controller.route('/song/<song_id>', methods=['GET'])
-def get_song_tasks(song_id):
+@transcribe_controller.route('/song/<int:song_id>', methods=['GET'])
+@use_dto(SongTasksQueryDTO, source='path')
+def get_song_tasks(dto: SongTasksQueryDTO):
     """获取歌曲的所有任务"""
     conn = get_db()
     if not conn:
-        return jsonify({'tasks': []})
-    
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute(
-                "SELECT * FROM transcribe_tasks WHERE song_id=%s ORDER BY created_at DESC",
-                (song_id,)
-            )
-            tasks = cursor.fetchall()
-        return jsonify({'tasks': [_serialize_task(task) for task in tasks]})
-    except Exception as e:
-        return jsonify({'tasks': [], 'error': str(e)})
+        raise RuntimeError('Database connection unavailable')
+
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "SELECT * FROM transcribe_tasks WHERE song_id=%s ORDER BY created_at DESC",
+            (dto.song_id,)
+        )
+        tasks = cursor.fetchall()
+
+    vo = SongTranscribeTasksVO(
+        song_id=dto.song_id,
+        tasks=[TranscribeTaskVO.from_domain(task) for task in tasks],
+    )
+    return Result.success(vo).to_response()
