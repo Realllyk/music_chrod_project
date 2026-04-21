@@ -2,6 +2,7 @@ absl-py==2.4.0
 anyio==3.7.1
 astunparse==1.6.3
 audioread==3.1.0
+basic-pitch==0.4.0
 blinker==1.9.0
 certifi==2026.2.25
 cffi==2.0.0
@@ -57,6 +58,7 @@ norbert==0.2.1
 numba==0.64.0
 numpy==1.24.3
 oauthlib==3.3.1
+onnxruntime==1.23.2
 opt_einsum==3.4.0
 packaging==25.0
 pandas==1.5.3

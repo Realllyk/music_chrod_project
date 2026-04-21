@@ -14,6 +14,7 @@ from transcriber.spleeter.melody import SpleeterMelodyTranscriber
 from transcriber.spleeter.chord import SpleeterChordTranscriber
 from transcriber.demucs.melody import DemucsMelodyTranscriber
 from transcriber.demucs.chord import DemucsChordTranscriber
+from transcriber.basic_pitch.melody import BasicPitchMelodyTranscriber
 
 __all__ = [
     'TranscriberBase',
@@ -26,4 +27,5 @@ __all__ = [
     'SpleeterChordTranscriber',
     'DemucsMelodyTranscriber',
     'DemucsChordTranscriber',
+    'BasicPitchMelodyTranscriber',
 ]
