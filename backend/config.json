@@ -25,7 +25,7 @@
   },
   "transcription": {
     "melody": {
-      "backend": "librosa",
+      "backend": "basic_pitch",
       "pitch_backend": "torchcrepe",
       "fmin": 65,
       "fmax": 1047,
