@@ -66,6 +66,10 @@ def use_dto(dto_cls: Type[BaseDTO], source: Source = 'json', arg_name: str = 'dt
                 dto = dto_cls.from_query(request.args)
             elif resolved == 'path':
                 dto = dto_cls.from_path(kwargs)
+                # 移除 Flask 路径变量，只留 dto，避免函数收到重复参数
+                for k in list(kwargs.keys()):
+                    if k != arg_name:
+                        del kwargs[k]
             else:
                 raise ValueError(f'Unsupported dto source: {resolved}')
 
