@@ -59,8 +59,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <button class="btn btn-primary" onclick="saveSongDetail()">保存修改</button>
 <button class="btn btn-danger" onclick="deleteSongDetail()">删除</button>
 </div>
+<script src="/js/api.js"></script>
 <script>
-const API_BASE = '';
 let currentSongId=null;
 let currentArtistId=null;
 function init(){
@@ -72,46 +72,45 @@ function init(){
 async function loadSongDetail(id){
     currentSongId=id;
     try{
-        const r=await fetch(API_BASE+'/api/songs/'+id).then(x=>x.json());
-        if(r.error){alert(r.error);return;}
+        const r=await apiGet('/api/songs/'+id);
         document.getElementById('songDetailId').value=r.id||'';
         document.getElementById('songDetailTitle').value=r.title||'';
         document.getElementById('songDetailCategory').value=r.category||'';
         document.getElementById('songDetailAudioPath').value=r.audio_path||'';
         document.getElementById('songDetailStatus').value=r.status||'';
         currentArtistId=r.artist_id;
-        
-        // 添加音频播放器
-        const audioPath=r.audio_path;
-        if(audioPath){
-            document.getElementById('audioPlayerGroup').style.display='block';
-            document.getElementById('audioPlayer').src=API_BASE+audioPath;
-            document.getElementById('audioInfo').textContent='音频文件: '+audioPath;
-        }
-        
-        loadArtistsForSongDetail();
 
-        // 转写结果展示
-        document.getElementById('historyLink').dataset.songId = id;
+        const audioUrl=r.audio_url||(r.audio_path?API_BASE+r.audio_path:'');
+        if(audioUrl){
+            document.getElementById('audioPlayerGroup').style.display='block';
+            document.getElementById('audioPlayer').src=audioUrl;
+            document.getElementById('audioInfo').textContent='音频文件: '+(r.audio_path||audioUrl);
+        }
+
+        loadArtistsForSongDetail();
+        document.getElementById('historyLink').dataset.songId=id;
+
         if(r.melody_url||r.melody_path){
-            const link=r.melody_url||r.melody_path;
+            const melodyDownloadUrl=r.melody_url||(r.melody_path?API_BASE+r.melody_path:'');
             const melodyEl=document.getElementById('melodyResult');
             melodyEl.style.color='';
             melodyEl.innerHTML='<a class="btn btn-primary" style="display:inline-block;text-decoration:none" href="/songs/melody?song_id='+encodeURIComponent(id)+'">查看旋律简谱</a>'
-                +'<a class="btn btn-secondary" style="display:inline-block;text-decoration:none" href="'+API_BASE+link+'" download>下载 MID</a>';
+                +(melodyDownloadUrl?'<a class="btn btn-secondary" style="display:inline-block;text-decoration:none" href="'+melodyDownloadUrl+'" download>下载 MID</a>':'');
         }
         if(r.chord_url||r.chord_path){
-            const link=r.chord_url||r.chord_path;
-            document.getElementById('chordResult').innerHTML='<a href="'+API_BASE+link+'" download style="color:#4ecdc4">下载和弦结果</a> <span style="color:#888;font-size:12px">('+link+')</span>';
+            const chordUrl=r.chord_url||(r.chord_path?API_BASE+r.chord_path:'');
+            document.getElementById('chordResult').innerHTML='<a href="'+chordUrl+'" download style="color:#4ecdc4">下载和弦结果</a> <span style="color:#888;font-size:12px">('+(r.chord_path||r.chord_url)+')</span>';
         }
-    }catch(e){alert(e.message);}
+    }catch(e){
+        alert(e.message);
+    }
 }
 async function loadArtistsForSongDetail(){
     try{
-        const r=await fetch(API_BASE+'/api/artists/list').then(x=>x.json());
+        const r=await apiGet('/api/artists/list');
         const sel=document.getElementById('songDetailArtist');
         sel.innerHTML='<option value="">-- 选择歌手 --</option>';
-        (r.artists||[]).forEach(a=>{sel.innerHTML+='<option value="'+a.id+'">'+a.name+'</option>';});
+        (r.items||r.artists||[]).forEach(a=>{sel.innerHTML+='<option value="'+a.id+'">'+a.name+'</option>';});
         if(currentArtistId)sel.value=currentArtistId;
     }catch(e){}
 }
@@ -121,9 +120,12 @@ async function saveSongDetail(){
     const artistId=document.getElementById('songDetailArtist').value;
     const category=document.getElementById('songDetailCategory').value;
     try{
-        const r=await fetch(API_BASE+'/api/songs/'+currentSongId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,artist_id:artistId||null,category})}).then(x=>x.json());
-        if(r.ok){alert('保存成功');window.location.href='/songs';}else{alert(r.error||'保存失败');}
-    }catch(e){alert(e.message);}
+        await apiPut('/api/songs/'+currentSongId,{title,artist_id:artistId||null,category});
+        alert('保存成功');
+        window.location.href='/songs';
+    }catch(e){
+        alert(e.message);
+    }
 }
 async function startTranscribe(mode){
     if(!currentSongId)return;
@@ -132,35 +134,30 @@ async function startTranscribe(mode){
     statusDiv.style.display='block';
     statusText.textContent='正在提交'+(mode==='melody'?'旋律提取':'和弦分离')+'任务...';
     try{
-        const r=await fetch(API_BASE+'/api/transcribe/start',{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({song_id:currentSongId,mode:mode})
-        }).then(x=>x.json());
-        if(r.ok){
-            statusText.style.color='#27ae60';
-            statusText.textContent='任务已提交，任务ID: '+r.task_id+'。可前往转写历史查看进度。';
-        }else{
-            statusText.style.color='#e74c3c';
-            statusText.textContent='提交失败: '+(r.error||'未知错误');
-        }
+        const r=await apiPost('/api/transcribe/start',{
+            song_id:currentSongId,
+            mode:mode
+        });
+        statusText.style.color='#27ae60';
+        statusText.textContent='任务已提交，任务ID: '+r.task_id+'。可前往转写历史查看进度。';
     }catch(e){
         statusText.style.color='#e74c3c';
         statusText.textContent='提交失败: '+e.message;
     }
 }
-
 function goHistory(){
     if(!currentSongId)return;
     window.location.href='/transcribe/history?song_id='+currentSongId;
 }
-
 async function deleteSongDetail(){
     if(!confirm('确定删除这首歌？'))return;
     try{
-        const r=await fetch(API_BASE+'/api/songs/'+currentSongId,{method:'DELETE'}).then(x=>x.json());
-        if(r.ok){alert('删除成功');window.location.href='/songs';}else{alert(r.error||'删除失败');}
-    }catch(e){alert(e.message);}
+        await apiDelete('/api/songs/'+currentSongId);
+        alert('删除成功');
+        window.location.href='/songs';
+    }catch(e){
+        alert(e.message);
+    }
 }
 init();
 </script>

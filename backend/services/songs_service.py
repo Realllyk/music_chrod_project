@@ -8,10 +8,12 @@ from __future__ import annotations
 import uuid
 
 from constants import SongStatus, AnalysisType
+from database import get_db
 from mappers.songs_mapper import SongsMapper
 from mappers.song_analysis_mapper import SongAnalysisMapper
+from pojo.dto.songs_dto import AddSongDTO
+from pojo.vo.exceptions import BadRequestException
 from services.file_service import FileService
-from database import get_db
 
 
 class SongsService:
@@ -67,6 +69,38 @@ class SongsService:
 
         SongsService.ensure_analysis_schema()
         return SongsMapper.insert(song_data)
+
+    @staticmethod
+    def create_song_from_dto(dto: AddSongDTO):
+        from services.audio_sources_service import AudioSourcesService
+
+        source = AudioSourcesService.get_audio_source(dto.audio_source_id)
+        if not source:
+            raise BadRequestException('Audio source not found')
+
+        audio_path = source.get('file_path') if isinstance(source, dict) else source[4]
+        if not audio_path:
+            raise BadRequestException('Audio source file_path is empty')
+
+        song_data = {
+            'title': dto.title,
+            'artist_id': dto.artist_id,
+            'category': dto.category,
+            'audio_path': audio_path,
+            'source': 'recording',
+            'source_id': str(dto.audio_source_id),
+            'status': SongStatus.PENDING.value,
+        }
+
+        song_id = SongsService.add_song(song_data)
+        if not song_id:
+            raise RuntimeError('Failed to add song')
+
+        song = SongsService.get_song_by_id(song_id)
+        if not song:
+            raise RuntimeError('Created song not found')
+
+        return song, audio_path
 
     @staticmethod
     def get_songs(limit=100, offset=0):
@@ -150,7 +184,7 @@ class SongsService:
         """返回旋律分析所需的原始领域对象。
 
         仅负责查询与业务判断，不做对外响应的 JSON 结构拼装；
-        响应序列化由 VO 层 (vos.melody_analysis_vo.MelodyAnalysisVO) 完成。
+        响应序列化由 VO 层 (pojo.vo.melody_analysis_vo.MelodyAnalysisVO) 完成。
 
         返回: (song, analysis, error)
             - song: songs 行（dict）或 None

@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 # 导入配置
 from database import DatabaseConnection
+from pojo.vo.error_handler import register_error_handlers
 
 # 导入 Controllers
 from controllers import (
@@ -36,6 +37,7 @@ from controllers import (
 # ============================================================================
 
 app = Flask(__name__)
+register_error_handlers(app)
 CORS(app)  # 启用跨域请求
 
 # 日志配置

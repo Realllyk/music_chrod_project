@@ -98,3 +98,4 @@ urllib3==2.6.3
 webcolors==25.10.0
 Werkzeug==2.3.8
 wrapt==1.14.2
+pydantic>=2.5,<3

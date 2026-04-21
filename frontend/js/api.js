@@ -19,6 +19,28 @@ async function handleResponse(response) {
 }
 
 /**
+ * 统一剥离后端 Result 响应外层包装
+ * @param {any} body
+ * @returns {any}
+ */
+function unwrap(body) {
+    // 非 JSON 对象（如 text / blob），原样返回
+    if (!body || typeof body !== 'object') return body;
+    // 不是 Result 形状，兼容旧接口，原样返回
+    if (!('code' in body) || !('result' in body)) return body;
+
+    // 业务失败：抛错，错误消息用 description
+    if (body.code !== 200) {
+        const err = new Error(body.description || 'Request failed');
+        err.code = body.code;
+        err.result = body.result;
+        throw err;
+    }
+    // 业务成功：只返回 result 字段，页面代码逻辑保持原样
+    return body.result;
+}
+
+/**
  * GET 请求
  * @param {string} path - API 路径（如 '/api/songs/list'）
  * @param {Object} [params] - URLSearchParams 参数对象
@@ -32,7 +54,8 @@ async function apiGet(path, params) {
     }
     const response = await fetch(url);
     if (!response.ok) throw new Error(`GET ${path} failed: ${response.status}`);
-    return handleResponse(response);
+    const body = await handleResponse(response);
+    return unwrap(body);
 }
 
 /**
@@ -48,7 +71,8 @@ async function apiPost(path, data) {
         body: data ? JSON.stringify(data) : '{}'
     });
     if (!response.ok) throw new Error(`POST ${path} failed: ${response.status}`);
-    return handleResponse(response);
+    const body = await handleResponse(response);
+    return unwrap(body);
 }
 
 /**
@@ -63,7 +87,8 @@ async function apiPostForm(path, formData) {
         body: formData
     });
     if (!response.ok) throw new Error(`POST ${path} failed: ${response.status}`);
-    return handleResponse(response);
+    const body = await handleResponse(response);
+    return unwrap(body);
 }
 
 /**
@@ -79,7 +104,8 @@ async function apiPut(path, data) {
         body: data ? JSON.stringify(data) : '{}'
     });
     if (!response.ok) throw new Error(`PUT ${path} failed: ${response.status}`);
-    return handleResponse(response);
+    const body = await handleResponse(response);
+    return unwrap(body);
 }
 
 /**
@@ -94,7 +120,8 @@ async function apiPutForm(path, formData) {
         body: formData
     });
     if (!response.ok) throw new Error(`PUT ${path} failed: ${response.status}`);
-    return handleResponse(response);
+    const body = await handleResponse(response);
+    return unwrap(body);
 }
 
 /**
@@ -107,5 +134,6 @@ async function apiDelete(path) {
         method: 'DELETE'
     });
     if (!response.ok) throw new Error(`DELETE ${path} failed: ${response.status}`);
-    return handleResponse(response);
+    const body = await handleResponse(response);
+    return unwrap(body);
 }
