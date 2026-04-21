@@ -112,7 +112,7 @@ class CaptureSessionsMapper:
             with conn.cursor() as cursor:
                 fields = []
                 values = []
-                for key in ['status', 'audio_name', 'file_path', 'sample_rate', 'channels', 'device_name', 'duration_sec', 'ended_at']:
+                for key in ['status', 'audio_name', 'file_path', 'sample_rate', 'channels', 'device_name', 'duration_sec', 'ended_at', 'source']:
                     if key in session_data and session_data[key] is not None:
                         fields.append(f"{key} = %s")
                         values.append(session_data[key])

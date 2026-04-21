@@ -9,5 +9,36 @@
 """
 
 from .base import BaseDTO, use_dto
+from .capture_dto import (
+    ListRecordingsQueryDTO,
+    ListSessionsQueryDTO,
+    RecordingFilePathDTO,
+    RegisterFileDTO,
+    RequestRecordingDTO,
+    SaveRecordingDTO,
+    SessionIdDTO,
+    SessionIdPathDTO,
+    StartRecordingDTO,
+    StartSessionDTO,
+    StopRecordingDTO,
+    UpdateSessionDTO,
+    UploadFileDTO,
+)
 
-__all__ = ['BaseDTO', 'use_dto']
+__all__ = [
+    'BaseDTO',
+    'use_dto',
+    'StartSessionDTO',
+    'SessionIdDTO',
+    'SessionIdPathDTO',
+    'ListSessionsQueryDTO',
+    'UpdateSessionDTO',
+    'RequestRecordingDTO',
+    'StartRecordingDTO',
+    'StopRecordingDTO',
+    'SaveRecordingDTO',
+    'RegisterFileDTO',
+    'UploadFileDTO',
+    'RecordingFilePathDTO',
+    'ListRecordingsQueryDTO',
+]

@@ -47,17 +47,17 @@ h1{margin-bottom:20px}
 </div>
 </div>
 
+<script src="/js/api.js"></script>
 <script>
-const API_BASE = '';
-
 async function loadRecordings(){
     const d=document.getElementById('recordingsList');
     d.innerHTML='<p>加载中...</p>';
     try{
-        const r=await fetch(API_BASE+'/api/capture/list?limit=100').then(x=>x.json());
-        if(r.sessions&&r.sessions.length>0){
+        const r=await apiGet('/api/capture/list',{limit:100});
+        const items=r.items||[];
+        if(items.length>0){
             d.innerHTML='<table class="table"><tr><th>ID</th><th>文件名</th><th>时长(秒)</th><th>状态</th><th>创建时间</th><th>操作</th></tr>'+
-                r.sessions.map(s=>`<tr>
+                items.map(s=>`<tr>
                     <td>${s.session_id}</td>
                     <td>${s.audio_name||'-'}</td>
                     <td>${s.duration_sec||'-'}</td>
@@ -92,30 +92,22 @@ async function saveEdit(){
     const fileName=document.getElementById('editFileName').value.trim();
     if(!fileName){alert('请输入文件名');return;}
     try{
-        const r=await fetch(API_BASE+'/api/capture/sessions/'+sessionId,{
-            method:'PUT',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({audio_name:fileName})
-        }).then(x=>x.json());
-        if(r.ok){
-            closeEditModal();
-            loadRecordings();
-        }else{
-            alert(r.error||'保存失败');
-        }
-    }catch(e){alert(e.message);}
+        await apiPut('/api/capture/sessions/'+sessionId,{audio_name:fileName});
+        closeEditModal();
+        await loadRecordings();
+    }catch(e){
+        alert(e.message);
+    }
 }
 
 async function deleteRecording(sessionId){
     if(!confirm('确定删除这条录音？'))return;
     try{
-        const r=await fetch(API_BASE+'/api/capture/sessions/'+sessionId,{method:'DELETE'}).then(x=>x.json());
-        if(r.ok){
-            loadRecordings();
-        }else{
-            alert(r.error||'删除失败');
-        }
-    }catch(e){alert(e.message);}
+        await apiDelete('/api/capture/sessions/'+sessionId);
+        await loadRecordings();
+    }catch(e){
+        alert(e.message);
+    }
 }
 
 loadRecordings();
