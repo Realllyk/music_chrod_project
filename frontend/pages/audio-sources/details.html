@@ -37,6 +37,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 <script src="/js/api.js"></script>
 <script>
+function formatFileSize(bytes) {
+    if (bytes == null) return '-';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
 let currentId = null;
 
 function init(){
@@ -54,7 +60,7 @@ async function loadDetail(id){
             <div class="info-row"><span class="info-label">ID</span><span class="info-value">${s.id||'-'}</span></div>
             <div class="info-row"><span class="info-label">文件名</span><span class="info-value">${s.audio_name||'-'}</span></div>
             <div class="info-row"><span class="info-label">格式</span><span class="info-value">${s.format||'-'}</span></div>
-            <div class="info-row"><span class="info-label">文件大小</span><span class="info-value">${s.file_size!=null?s.file_size+' 字节':'-'}</span></div>
+            <div class="info-row"><span class="info-label">文件大小</span><span class="info-value">${formatFileSize(s.file_size)}</span></div>
             <div class="info-row"><span class="info-label">状态</span><span class="info-value">${s.status||'-'}</span></div>
             <div class="info-row"><span class="info-label">上传时间</span><span class="info-value">${s.created_at||'-'}</span></div>
             <div class="info-row"><span class="info-label">文件路径</span><span class="info-value">${s.file_path||'-'}</span></div>

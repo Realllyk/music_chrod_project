@@ -46,7 +46,7 @@ def get_song(song_id):
 
 @songs_controller.route('/<int:song_id>/melody-analysis', methods=['GET'])
 @use_dto(SongIdPathDTO, source='path')
-def get_song_melody_analysis(song_id: int, dto: SongIdPathDTO):
+def get_song_melody_analysis(dto: SongIdPathDTO):
     song, analysis, error = SongsService.get_melody_analysis(dto.song_id)
     if error == 'song_not_found':
         return Result.not_found('Song not found').to_response()

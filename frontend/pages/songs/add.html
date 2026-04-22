@@ -37,7 +37,7 @@ async function loadAudioSources(){
         const r=await apiGet('/api/audio-sources/list');
         const sel=document.getElementById('audioSourceId');
         sel.innerHTML='<option value="">-- 选择音源 --</option>';
-        (r.sources||[]).forEach(source=>{
+        (r.items||[]).forEach(source=>{
             const name=source.audio_name||source.title||source.file_path||('音源#'+source.id);
             sel.innerHTML+='<option value="'+source.id+'">#'+source.id+' - '+name+'</option>';
         });
