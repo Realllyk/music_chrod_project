@@ -65,8 +65,15 @@ class BasicPitchMelodyTranscriber(MelodyTranscriberBase):
         # 会通过后处理只保留一个“主旋律音”。
         self.melody_only = self.config.get('melody_only', True)
 
-        # basic-pitch 本身不做 BPM 检测，这里使用配置中的默认 tempo。
-        self.midi_tempo = self.config.get('midi_tempo', 120)
+        # basic-pitch 默认 tempo 及可选 BPM 检测能力。
+        self.midi_tempo = float(self.config.get('midi_tempo', 120))
+        self.detect_tempo = self.config.get('detect_tempo', True)
+        self.tempo_min = float(self.config.get('tempo_min', 60))
+        self.tempo_max = float(self.config.get('tempo_max', 200))
+
+        # MIDI 力度归一化范围。
+        self.velocity_min = int(self.config.get('velocity_min', 50))
+        self.velocity_max = int(self.config.get('velocity_max', 120))
 
     def _load_basic_pitch_config(self) -> Dict:
         """读取 config.json 中 transcription.basic_pitch 配置。"""
@@ -126,9 +133,21 @@ class BasicPitchMelodyTranscriber(MelodyTranscriberBase):
         # 第三步：排序并去掉完全重复的音符。
         notes = self._dedup_and_sort(notes)
 
+        # 第四步：按当前歌曲内相对强度归一化 velocity。
+        notes = self._normalize_velocities(notes)
+
         self.notes = notes
-        self.tempo = float(self.midi_tempo)
-        logger.info(f"basic-pitch 最终音符数: {len(notes)}")
+
+        if self.detect_tempo:
+            try:
+                self.tempo = self._detect_tempo(audio_path)
+            except Exception as e:
+                logger.warning(f"BPM 检测失败，回退到固定 {self.midi_tempo}: {e}")
+                self.tempo = float(self.midi_tempo)
+        else:
+            self.tempo = float(self.midi_tempo)
+
+        logger.info(f"basic-pitch 最终音符数: {len(notes)}, tempo={self.tempo}")
         return self.notes_to_dict()
 
     def _convert_note_events(self, note_events) -> List[Dict]:
@@ -170,54 +189,127 @@ class BasicPitchMelodyTranscriber(MelodyTranscriberBase):
     def _filter_melody_only(self, notes: List[Dict]) -> List[Dict]:
         """把多音输出压缩成单旋律。
 
-        basic-pitch 本质上是多音模型，同一时刻可能识别出多个重叠音。
-        而当前项目目标是“主旋律”，所以这里做一个贪心后处理：
+        采用边界区间法：
+        - 收集所有音符的 start/end 作为边界
+        - 在每个基础区间内选择置信度最高的音符
+        - 再合并相邻且 MIDI 相同的区间
 
-        - 如果两个音符不重叠：都保留
-        - 如果重叠：优先保留 confidence（amplitude）更高的那个
-        - 如果后来的音更强，会把前一个音的尾部裁剪到新音起点
-
-        这是启发式策略，不是严格的音乐理论规则，但足以用于当前单旋律场景。
+        这样可以避免“低置信度音符和高置信度音符部分重叠时被整段误丢弃”的问题。
         """
         if not notes:
             return []
 
-        # 先按起始帧排序；如果同起点，则把 confidence 更高的排前面。
-        sorted_notes = sorted(notes, key=lambda n: (n['start_frame'], -n['confidence']))
-        kept: List[Dict] = []
+        boundaries = sorted({
+            frame
+            for note in notes
+            for frame in (note['start_frame'], note['end_frame'])
+        })
+        if len(boundaries) < 2:
+            return self._dedup_and_sort([note.copy() for note in notes])
 
-        for note in sorted_notes:
-            if not kept:
-                kept.append(note.copy())
+        intervals = []
+        for start_frame, end_frame in zip(boundaries[:-1], boundaries[1:]):
+            if end_frame <= start_frame:
                 continue
 
-            last = kept[-1]
-            overlap = note['start_frame'] < last['end_frame']
-
-            # 不重叠则直接保留。
-            if not overlap:
-                kept.append(note.copy())
+            active_notes = [
+                note for note in notes
+                if note['start_frame'] <= start_frame and note['end_frame'] >= end_frame
+            ]
+            if not active_notes:
                 continue
 
-            # 重叠时，如果当前音更“强”，则尝试让它替换前一个音的后半段。
-            if note['confidence'] > last['confidence']:
-                last_new_end = note['start_frame']
-                last_new_duration = (last_new_end - last['start_frame']) * self.hop_length / self.sr
+            winner = max(active_notes, key=lambda note: note['confidence'])
+            intervals.append({
+                'midi': int(winner['midi']),
+                'start_frame': int(start_frame),
+                'end_frame': int(end_frame),
+                'freq': float(winner['freq']),
+                'confidence': float(winner['confidence']),
+            })
 
-                # 如果裁剪后的前一个音仍有足够长度，则保留缩短后的版本；
-                # 否则直接丢弃前一个音。
-                if last_new_duration >= (self.minimum_note_length_ms / 1000.0):
-                    last['end_frame'] = last_new_end
-                    last['duration'] = last_new_duration
-                else:
-                    kept.pop()
+        if not intervals:
+            return []
 
-                kept.append(note.copy())
+        merged: List[Dict] = []
+        for interval in intervals:
+            if (
+                merged
+                and merged[-1]['midi'] == interval['midi']
+                and merged[-1]['end_frame'] == interval['start_frame']
+            ):
+                merged[-1]['end_frame'] = interval['end_frame']
+                merged[-1]['confidence'] = max(merged[-1]['confidence'], interval['confidence'])
             else:
-                # 当前音更弱，则认为它更可能是伴随音或次要音，直接丢弃。
+                merged.append(interval.copy())
+
+        min_frames = int(round((self.minimum_note_length_ms / 1000.0) * self.sr / self.hop_length))
+        min_frames = max(min_frames, 1)
+
+        filtered = []
+        for note in merged:
+            frame_count = note['end_frame'] - note['start_frame']
+            if frame_count < min_frames:
                 continue
 
-        return kept
+            duration = frame_count * self.hop_length / self.sr
+            filtered.append({
+                'midi': int(note['midi']),
+                'start_frame': int(note['start_frame']),
+                'end_frame': int(note['end_frame']),
+                'duration': float(duration),
+                'freq': float(note['freq']),
+                'confidence': float(note['confidence']),
+            })
+
+        return filtered
+
+    def _detect_tempo(self, audio_path: str) -> float:
+        """检测输入音频的 BPM，失败由调用方负责兜底。"""
+        import librosa
+
+        y, sr = librosa.load(audio_path, sr=self.sr, mono=True)
+        tempo, _ = librosa.beat.beat_track(y=y, sr=sr, hop_length=self.hop_length)
+
+        if hasattr(tempo, '__len__'):
+            tempo = float(tempo[0]) if len(tempo) else float(self.midi_tempo)
+        tempo = float(tempo) if tempo else float(self.midi_tempo)
+
+        if tempo < self.tempo_min:
+            doubled = tempo * 2
+            if doubled <= self.tempo_max:
+                tempo = doubled
+        elif tempo > self.tempo_max:
+            halved = tempo / 2
+            if halved >= self.tempo_min:
+                tempo = halved
+
+        return float(min(max(tempo, self.tempo_min), self.tempo_max))
+
+    def _normalize_velocities(self, notes: List[Dict]) -> List[Dict]:
+        """按当前歌曲内的相对强度归一化 MIDI velocity。"""
+        if not notes:
+            return notes
+
+        velocity_min = max(1, min(int(self.velocity_min), 127))
+        velocity_max = max(1, min(int(self.velocity_max), 127))
+        if velocity_max < velocity_min:
+            velocity_min, velocity_max = velocity_max, velocity_min
+
+        confidences = [float(note.get('confidence', 0.0)) for note in notes]
+        conf_min = min(confidences)
+        conf_max = max(confidences)
+
+        if conf_max - conf_min < 1e-6:
+            fallback_velocity = int(round((velocity_min + velocity_max) / 2))
+            for note in notes:
+                note['velocity'] = fallback_velocity
+            return notes
+
+        for note in notes:
+            ratio = (float(note.get('confidence', 0.0)) - conf_min) / (conf_max - conf_min)
+            note['velocity'] = int(round(velocity_min + ratio * (velocity_max - velocity_min)))
+        return notes
 
     def _dedup_and_sort(self, notes: List[Dict]) -> List[Dict]:
         """排序并去重。
@@ -267,7 +359,7 @@ class BasicPitchMelodyTranscriber(MelodyTranscriberBase):
             logger.warning('没有音符，无法生成 MIDI')
             return None
 
-        midi = pretty_midi.PrettyMIDI(initial_tempo=float(self.tempo or 120))
+        midi = pretty_midi.PrettyMIDI(initial_tempo=float(self.tempo or self.midi_tempo or 120))
         midi.time_signature_changes.append(pretty_midi.TimeSignature(4, 4, 0))
         instrument = pretty_midi.Instrument(program=0, name='Melody')
 
@@ -277,9 +369,8 @@ class BasicPitchMelodyTranscriber(MelodyTranscriberBase):
             if end_time <= start_time:
                 continue
 
-            # confidence 这里映射到 MIDI velocity，范围压到 1~127。
             midi_note = pretty_midi.Note(
-                velocity=min(127, max(1, int(note_info['confidence'] * 127))),
+                velocity=min(127, max(1, int(note_info.get('velocity', 90)))),
                 pitch=int(note_info['midi']),
                 start=float(start_time),
                 end=float(end_time),

@@ -53,13 +53,18 @@
       "onset_merge_min_gap_frames": 5
     },
     "basic_pitch": {
-      "onset_threshold": 0.5,
+      "onset_threshold": 0.4,
       "frame_threshold": 0.3,
-      "minimum_note_length_ms": 127.7,
+      "minimum_note_length_ms": 80,
       "minimum_frequency": 65.0,
       "maximum_frequency": 1100.0,
       "melody_only": true,
-      "midi_tempo": 120
+      "midi_tempo": 120,
+      "detect_tempo": true,
+      "tempo_min": 60,
+      "tempo_max": 200,
+      "velocity_min": 50,
+      "velocity_max": 120
     },
     "polyphonic": {
       "n_voices": 2,
