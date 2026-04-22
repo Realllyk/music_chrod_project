@@ -54,7 +54,7 @@
     },
     "basic_pitch": {
       "onset_threshold": 0.4,
-      "frame_threshold": 0.3,
+      "frame_threshold": 0.25,
       "minimum_note_length_ms": 80,
       "minimum_frequency": 65.0,
       "maximum_frequency": 1100.0,
@@ -64,7 +64,13 @@
       "tempo_min": 60,
       "tempo_max": 200,
       "velocity_min": 50,
-      "velocity_max": 120
+      "velocity_max": 120,
+      "prefilter_min_ms": 40,
+      "same_pitch_gap_ms": 50,
+      "melisma_merge_enabled": true,
+      "melisma_short_ms": 120,
+      "melisma_gap_ms": 30,
+      "melisma_semitone_window": 1
     },
     "polyphonic": {
       "n_voices": 2,

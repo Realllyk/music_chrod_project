@@ -75,6 +75,19 @@ class BasicPitchMelodyTranscriber(MelodyTranscriberBase):
         self.velocity_min = int(self.config.get('velocity_min', 50))
         self.velocity_max = int(self.config.get('velocity_max', 120))
 
+        # 扫描线阶段的宽松预过滤阈值：比 minimum_note_length_ms 小，
+        # 让尾音碎片有机会进入后续的 gap-merge，而不是在此阶段被整批丢弃。
+        self.prefilter_min_ms = float(self.config.get('prefilter_min_ms', 40))
+
+        # 同 midi、小 gap 合并的最大可容忍间隙。
+        self.same_pitch_gap_ms = float(self.config.get('same_pitch_gap_ms', 50))
+
+        # 转音（melisma）装饰音吸收的参数。
+        self.melisma_merge_enabled = bool(self.config.get('melisma_merge_enabled', True))
+        self.melisma_short_ms = float(self.config.get('melisma_short_ms', 120))
+        self.melisma_gap_ms = float(self.config.get('melisma_gap_ms', 30))
+        self.melisma_semitone_window = int(self.config.get('melisma_semitone_window', 1))
+
     def _load_basic_pitch_config(self) -> Dict:
         """读取 config.json 中 transcription.basic_pitch 配置。"""
         config_path = Path(__file__).resolve().parents[2] / 'config.json'
@@ -126,14 +139,27 @@ class BasicPitchMelodyTranscriber(MelodyTranscriberBase):
         # 第一步：把 basic-pitch 原始 note_events 转换成项目统一 notes 结构。
         notes = self._convert_note_events(note_events)
 
-        # 第二步：如果要求单旋律，则做一次“重叠音去多留一”的后处理。
+        # 第二步：如果要求单旋律，做扫描线去重叠。
+        # 注意：此处只按 prefilter_min_ms 做宽松过滤，尾音碎片会被保留到后续合并阶段。
         if self.melody_only:
             notes = self._filter_melody_only(notes)
 
-        # 第三步：排序并去掉完全重复的音符。
+        # 第三步：尾音保留 —— 合并同 midi 且小 gap 的相邻段。
+        notes = self._merge_same_pitch_gap(notes)
+
+        # 第四步：转音合并 —— 短小音程装饰音吸收到相邻主音。
+        notes = self._merge_melisma(notes)
+
+        # 第五步：再次合并同 midi —— 因上一步改写 midi 后可能形成新的同 midi 相邻段。
+        notes = self._merge_same_pitch_gap(notes)
+
+        # 第六步：最终按 minimum_note_length_ms 过滤掉仍然过短的音符。
+        notes = self._apply_min_length(notes)
+
+        # 第七步：排序并去掉完全重复的音符。
         notes = self._dedup_and_sort(notes)
 
-        # 第四步：按当前歌曲内相对强度归一化 velocity。
+        # 第八步：按当前歌曲内相对强度归一化 velocity。
         notes = self._normalize_velocities(notes)
 
         self.notes = notes
@@ -243,7 +269,9 @@ class BasicPitchMelodyTranscriber(MelodyTranscriberBase):
             else:
                 merged.append(interval.copy())
 
-        min_frames = int(round((self.minimum_note_length_ms / 1000.0) * self.sr / self.hop_length))
+        # 这里使用较宽松的 prefilter 阈值，只过滤掉扫描线产生的极碎片段。
+        # 真正按 minimum_note_length_ms 的最终过滤延迟到 gap-merge / 转音合并之后。
+        min_frames = int(round((self.prefilter_min_ms / 1000.0) * self.sr / self.hop_length))
         min_frames = max(min_frames, 1)
 
         filtered = []
@@ -263,6 +291,99 @@ class BasicPitchMelodyTranscriber(MelodyTranscriberBase):
             })
 
         return filtered
+
+    def _merge_same_pitch_gap(self, notes: List[Dict]) -> List[Dict]:
+        """合并 midi 相同且时间间隙不超过阈值的相邻段。
+
+        用途：
+        - 尾音衰减被 basic-pitch 切成一串同 midi 的短碎片时，把它们重新粘回完整一段
+        - 也用作 _merge_melisma 之后的收尾：转音装饰音的 midi 被改写为主音后，
+          相邻段出现同 midi，再做一次合并即可形成连贯主音
+        """
+        if len(notes) < 2:
+            return [note.copy() for note in notes]
+
+        gap_frames = int(round((self.same_pitch_gap_ms / 1000.0) * self.sr / self.hop_length))
+        sorted_notes = sorted([note.copy() for note in notes], key=lambda n: n['start_frame'])
+
+        merged: List[Dict] = []
+        for cur in sorted_notes:
+            if (
+                merged
+                and merged[-1]['midi'] == cur['midi']
+                and 0 <= cur['start_frame'] - merged[-1]['end_frame'] <= gap_frames
+            ):
+                prev = merged[-1]
+                prev['end_frame'] = max(prev['end_frame'], cur['end_frame'])
+                prev['confidence'] = float(max(prev['confidence'], cur['confidence']))
+                prev['duration'] = (prev['end_frame'] - prev['start_frame']) * self.hop_length / self.sr
+            else:
+                merged.append(cur)
+        return merged
+
+    def _merge_melisma(self, notes: List[Dict]) -> List[Dict]:
+        """把转音段内的短小音程装饰音吸收到相邻主音。
+
+        策略：
+        - 只改写短音的 midi/freq/confidence，不合并、不删除
+        - 合并交给随后 _merge_same_pitch_gap 统一处理
+
+        吸收条件（需全部满足）：
+        - 当前音 duration < melisma_short_ms
+        - 与左邻或右邻的 gap ≤ melisma_gap_ms
+        - 与该邻音的 |Δmidi| ≤ melisma_semitone_window
+        - 邻音本身足够长（视 duration 判定 anchor）
+        """
+        if len(notes) < 2 or not self.melisma_merge_enabled:
+            return [note.copy() for note in notes]
+
+        short_frames = int(round((self.melisma_short_ms / 1000.0) * self.sr / self.hop_length))
+        gap_frames = int(round((self.melisma_gap_ms / 1000.0) * self.sr / self.hop_length))
+        semitone = int(self.melisma_semitone_window)
+
+        sorted_notes = sorted([note.copy() for note in notes], key=lambda n: n['start_frame'])
+
+        for i, cur in enumerate(sorted_notes):
+            cur_frames = cur['end_frame'] - cur['start_frame']
+            if cur_frames >= short_frames:
+                continue
+
+            candidates = []
+            if i > 0:
+                left = sorted_notes[i - 1]
+                gap_l = cur['start_frame'] - left['end_frame']
+                if 0 <= gap_l <= gap_frames and abs(int(cur['midi']) - int(left['midi'])) <= semitone:
+                    candidates.append(left)
+            if i < len(sorted_notes) - 1:
+                right = sorted_notes[i + 1]
+                gap_r = right['start_frame'] - cur['end_frame']
+                if 0 <= gap_r <= gap_frames and abs(int(cur['midi']) - int(right['midi'])) <= semitone:
+                    candidates.append(right)
+
+            if not candidates:
+                continue
+
+            # anchor 选择：持续时间更长的邻音
+            anchor = max(candidates, key=lambda n: n['end_frame'] - n['start_frame'])
+            # 仅吸收到“比自己更长”的 anchor，避免两个都很短的音互相改写
+            if (anchor['end_frame'] - anchor['start_frame']) <= cur_frames:
+                continue
+
+            cur['midi'] = int(anchor['midi'])
+            cur['freq'] = float(anchor['freq'])
+            cur['confidence'] = float(max(cur['confidence'], anchor['confidence']))
+
+        return sorted_notes
+
+    def _apply_min_length(self, notes: List[Dict]) -> List[Dict]:
+        """按 minimum_note_length_ms 做最终最小长度过滤。
+
+        位置：gap-merge 与转音合并之后，确保被合并的尾音碎片不会被错误丢弃，
+        同时仍然剔除合并后依旧过短的杂音。
+        """
+        min_frames = int(round((self.minimum_note_length_ms / 1000.0) * self.sr / self.hop_length))
+        min_frames = max(min_frames, 1)
+        return [n for n in notes if (n['end_frame'] - n['start_frame']) >= min_frames]
 
     def _detect_tempo(self, audio_path: str) -> float:
         """检测输入音频的 BPM，失败由调用方负责兜底。"""
