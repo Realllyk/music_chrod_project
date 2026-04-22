@@ -160,10 +160,34 @@ class MelodyAnalysisService:
 
     @staticmethod
     def _build_notation_notes(notes: List, tonic_pc: int, mode: str, tempo_bpm: float) -> List[Dict]:
+        """把 MIDI note 列表转换成简谱渲染所需的结构化数据。
+
+        简谱的基本写法：
+          - 每个音用 1~7 表示「相对调性主音的级数」，可能带 # / b
+          - 数字头上加点 = 高八度；数字脚下加点 = 低八度；不加点 = 中央八度
+          - 每个音还要给出时长（秒 / 拍），用于渲染与播放
+
+        参数：
+            notes:     已按 start 排序的 MIDI note 对象（pretty_midi.Note）
+            tonic_pc:  调性主音的「音级」（pitch class），0=C、1=C#、…、9=A、11=B。
+                       只表示主音是哪个音名，不带八度。
+            mode:      'major' / 'minor'，决定级数到半音的映射表
+            tempo_bpm: BPM，用来把秒换算成拍
+
+        返回：每个音符的 dict 列表，字段含 degree / octave_offset / midi / 时长等。
+        """
+        # 按大调 / 小调选择「相对主音的半音差 -> 级数数字」映射表
         degree_map = DEGREE_MAP_MINOR if mode == 'minor' else DEGREE_MAP_MAJOR
+
+        # tonic_reference_midi：把抽象的 tonic_pc（不带八度）锚定到一个具体的 MIDI 号，
+        # 作为判定「中央八度」的参考点。
+        #   - MIDI 协议里 C4 = 60，每升 12 表示升一个八度
+        #   - 60 + tonic_pc 得到「以 C4 那一组为基准八度」的主音 MIDI
+        #     例：C 大调 -> 60 (C4)、A 小调 -> 69 (A4)
+        #   - 随后每个音符与它相除，得到相对这个基准偏了几个八度
         tonic_reference_midi = 60 + tonic_pc
-        if tonic_reference_midi > 71:
-            tonic_reference_midi -= 12
+
+        # 一拍的时长（秒）= 60 / BPM；BPM 异常时用 0.5s 兜底（相当于 120 BPM）
         beat_duration = 60.0 / tempo_bpm if tempo_bpm and tempo_bpm > 0 else 0.5
 
         serialized = []
@@ -171,9 +195,24 @@ class MelodyAnalysisService:
             start = float(note.start)
             end = float(note.end)
             duration = max(end - start, 0.0)
+
+            # midi_pitch：当前音符的 MIDI 音高号（0~127），如 C4=60、G4=67、C5=72
             midi_pitch = int(note.pitch)
+
+            # delta：当前音符相对主音的半音差，压回 [0, 11) 内（忽略八度）
+            # 查 degree_map 即得简谱级数：C 大调里 C=1 / D=2 / … / B=7
             delta = (midi_pitch - tonic_pc) % 12
-            octave_offset = int(round((midi_pitch - tonic_reference_midi) / 12.0))
+
+            # octave_offset：当前音符相对「中央八度」偏了几个八度
+            #   0  = 中央八度（数字不加点）
+            #   +1 = 高一个八度（数字头上加一个点）
+            #   -1 = 低一个八度（数字脚下加一个点）
+            # 用 floor division 而非 round()：简谱的「中央八度」是半开区间
+            # [tonic_reference_midi, tonic_reference_midi + 12)，凡落入此区间的音
+            # octave_offset 都应为 0，而 round() 会把相差 7~11 个半音的音
+            # （例如 C 大调里的 G4、B4）错误抛到高一个八度。
+            octave_offset = (int(midi_pitch) - int(tonic_reference_midi)) // 12
+
             serialized.append({
                 'index': index,
                 'start': round(start, 4),
