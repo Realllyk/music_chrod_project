@@ -20,6 +20,11 @@ class AudioSourcesService:
     def list_audio_sources(limit=100, offset=0):
         """列出音源（不按状态过滤）"""
         return AudioSourcesMapper.find_all(limit, offset)
+
+    @staticmethod
+    def count_audio_sources():
+        """获取音源总数"""
+        return AudioSourcesMapper.count()
     
     @staticmethod
     def update_audio_source(audio_id, data):

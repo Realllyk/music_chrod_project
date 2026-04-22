@@ -35,8 +35,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <button class="btn btn-secondary" onclick="window.location.href='/audio-sources'">返回列表</button>
 <button class="btn btn-danger" onclick="deleteSource()">删除音源</button>
 </div>
+<script src="/js/api.js"></script>
 <script>
-const API_BASE = '';
 let currentId = null;
 
 function init(){
@@ -49,9 +49,7 @@ function init(){
 
 async function loadDetail(id){
     try{
-        const r = await fetch(API_BASE+'/api/audio-sources/'+id).then(x=>x.json());
-        if(r.error){ alert(r.error); return; }
-        const s = r;
+        const s = await apiGet('/api/audio-sources/'+id);
         document.getElementById('infoContent').innerHTML = `
             <div class="info-row"><span class="info-label">ID</span><span class="info-value">${s.id||'-'}</span></div>
             <div class="info-row"><span class="info-label">文件名</span><span class="info-value">${s.audio_name||'-'}</span></div>
@@ -61,20 +59,25 @@ async function loadDetail(id){
             <div class="info-row"><span class="info-label">上传时间</span><span class="info-value">${s.created_at||'-'}</span></div>
             <div class="info-row"><span class="info-label">文件路径</span><span class="info-value">${s.file_path||'-'}</span></div>
         `;
-        if(s.file_path){
+        const previewUrl = s.file_url || s.file_path || '';
+        if(previewUrl){
             document.getElementById('audioCard').style.display='block';
-            document.getElementById('audioPlayer').src = API_BASE+s.file_path;
+            document.getElementById('audioPlayer').src = previewUrl;
         }
-    }catch(e){ alert('加载失败: '+e.message); }
+    }catch(e){
+        alert('加载失败: '+e.message);
+    }
 }
 
 async function deleteSource(){
     if(!confirm('确定删除该音源？此操作不可撤销。'))return;
     try{
-        const r = await fetch(API_BASE+'/api/audio-sources/'+currentId,{method:'DELETE'}).then(x=>x.json());
-        if(r.ok){ alert('删除成功'); window.location.href='/audio-sources'; }
-        else{ alert(r.error||'删除失败'); }
-    }catch(e){ alert('删除失败: '+e.message); }
+        await apiDelete('/api/audio-sources/'+currentId);
+        alert('删除成功');
+        window.location.href='/audio-sources';
+    }catch(e){
+        alert('删除失败: '+e.message);
+    }
 }
 
 init();

@@ -29,25 +29,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <button class="btn btn-secondary" onclick="document.getElementById('searchArtist').value='';loadArtists()">清除</button>
 <div id="artistsList" style="margin-top:20px"></div>
 </div>
+<script src="/js/api.js"></script>
 <script>
-const API_BASE = '';
 async function loadArtists(){
     const search=document.getElementById('searchArtist')?.value||'';
+    const container=document.getElementById('artistsList');
     try{
-        const r=await fetch(API_BASE+'/api/artists/list').then(x=>x.json());
-        const d=document.getElementById('artistsList');
-        let list=r.artists||[];
-        if(search)list=list.filter(a=>a.name.toLowerCase().includes(search.toLowerCase()));
+        const r=await apiGet('/api/artists/list');
+        let list=r.items||[];
+        if(search)list=list.filter(a=>(a.name||'').toLowerCase().includes(search.toLowerCase()));
         if(list.length>0){
-            d.innerHTML='<div class="artist-grid">'+list.map(a=>'<div class="artist-card" onclick="loadArtistDetail('+a.id+')">'+(a.avatar?'<img src="'+a.avatar+'" class="artist-avatar">':'<div class="avatar-placeholder">👤</div>')+'<div class="artist-name">'+a.name+'</div></div>').join('')+'</div>';
-        }else{d.innerHTML='<p style="color:#aaa">暂无歌手</p>';}
-    }catch(e){}
+            container.innerHTML='<div class="artist-grid">'+list.map(a=>'<div class="artist-card" onclick="loadArtistDetail('+a.id+')">'+(a.avatar?'<img src="'+a.avatar+'" class="artist-avatar">':'<div class="avatar-placeholder">👤</div>')+'<div class="artist-name">'+(a.name||'')+'</div></div>').join('')+'</div>';
+        }else{
+            container.innerHTML='<p style="color:#aaa">暂无歌手</p>';
+        }
+    }catch(e){
+        container.innerHTML='<p style="color:#ff6b6b">加载失败：'+e.message+'</p>';
+    }
 }
 function loadArtistDetail(id){
     window.location.href='/artists/details?id='+id;
 }
 loadArtists();
 </script>
-</body>
 <script src="/js/menu.js"></script>
+</body>
 </html>

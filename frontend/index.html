@@ -90,26 +90,22 @@ h1{color:#333;margin-bottom:4px}
 </div>
 </div>
 
+<script src="/js/api.js"></script>
 <script>
 const API_BASE = '';
 
 async function loadStats(){
-    const [songsRes, artistsRes, sourcesRes] = await Promise.allSettled([
-        fetch(API_BASE+'/api/songs/list?limit=1').then(x=>x.json()),
-        fetch(API_BASE+'/api/artists/list?limit=1').then(x=>x.json()),
-        fetch(API_BASE+'/api/audio-sources/list?limit=1').then(x=>x.json())
-    ]);
-    if(songsRes.status==='fulfilled'){
-        const d=songsRes.value;
-        document.getElementById('statSongs').textContent=d.total!=null?d.total:(d.songs?d.songs.length:'?');
-    }
-    if(artistsRes.status==='fulfilled'){
-        const d=artistsRes.value;
-        document.getElementById('statArtists').textContent=d.total!=null?d.total:(d.artists?d.artists.length:'?');
-    }
-    if(sourcesRes.status==='fulfilled'){
-        const d=sourcesRes.value;
-        document.getElementById('statSources').textContent=d.total!=null?d.total:(d.sources?d.sources.length:'?');
+    try {
+        const [songsData, artistsData, sourcesData] = await Promise.all([
+            apiGet('/api/songs/count'),
+            apiGet('/api/artists/count'),
+            apiGet('/api/audio-sources/count')
+        ]);
+        document.getElementById('statSongs').textContent = songsData.total ?? 0;
+        document.getElementById('statArtists').textContent = artistsData.total ?? 0;
+        document.getElementById('statSources').textContent = sourcesData.total ?? 0;
+    } catch(e) {
+        console.error('loadStats failed:', e);
     }
 }
 

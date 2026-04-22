@@ -99,6 +99,22 @@ class SongsMapper:
             return [], 0
 
     @staticmethod
+    def count():
+        conn = get_db()
+        if not conn:
+            return 0
+
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT COUNT(*) as cnt FROM songs")
+                return cursor.fetchone()['cnt']
+        except Exception as e:
+            print(f"统计歌曲数量失败: {e}")
+            return 0
+        finally:
+            conn.close()
+
+    @staticmethod
     def find_all(limit=100, offset=0):
         conn = get_db()
         if not conn:

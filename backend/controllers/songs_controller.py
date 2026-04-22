@@ -30,6 +30,12 @@ def list_songs(dto: ListSongsQueryDTO):
     ).to_response()
 
 
+@songs_controller.route('/count', methods=['GET'])
+def get_songs_count():
+    count = SongsService.count_songs()
+    return Result.success({'total': count}).to_response()
+
+
 @songs_controller.route('/<int:song_id>', methods=['GET'])
 def get_song(song_id):
     song = SongsService.get_song_by_id(song_id)

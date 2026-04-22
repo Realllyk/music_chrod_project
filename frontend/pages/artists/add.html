@@ -28,8 +28,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="form-group"><label>简介</label><input type="text" id="artistBio"></div>
 <button class="btn btn-primary" onclick="addArtist()">保存</button>
 </div>
+<script src="/js/api.js"></script>
 <script>
-const API_BASE = '';
 function previewAvatar(){
     const file=document.getElementById('avatarFile').files[0];
     if(file){
@@ -48,12 +48,18 @@ async function addArtist(){
     if(bio)formData.append('bio',bio);
     if(avatarFile)formData.append('avatar',avatarFile);
     try{
-        const r=await fetch(API_BASE+'/api/artists/add',{method:'POST',body:formData}).then(x=>x.json());
-        if(r.ok){alert('保存成功');document.getElementById('artistName').value='';document.getElementById('artistBio').value='';document.getElementById('avatarPreview').innerHTML='';}
-        else{alert(r.error);}
-    }catch(e){alert(e.message);}
+        const r=await apiPostForm('/api/artists/add',formData);
+        alert('保存成功');
+        void r.artist_id;
+        document.getElementById('artistName').value='';
+        document.getElementById('artistBio').value='';
+        document.getElementById('avatarFile').value='';
+        document.getElementById('avatarPreview').innerHTML='';
+    }catch(e){
+        alert(e.message);
+    }
 }
 </script>
-</body>
 <script src="/js/menu.js"></script>
+</body>
 </html>

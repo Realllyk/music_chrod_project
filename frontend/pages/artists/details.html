@@ -36,9 +36,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <button class="btn btn-primary" onclick="saveArtistDetail()">保存修改</button>
 <button class="btn btn-danger" onclick="deleteArtistDetail()">删除</button>
 </div>
+<script src="/js/api.js"></script>
 <script>
-const API_BASE = '';
 let currentArtistDetailId=null;
+function renderArtistAvatar(avatar){
+    const avatarPreview=document.getElementById('artistDetailAvatarPreview');
+    if(avatar){
+        avatarPreview.innerHTML='<img src="'+avatar+'" style="width:100px;height:100px;border-radius:50%;object-fit:cover">';
+    }else{
+        avatarPreview.innerHTML='<div style="width:100px;height:100px;border-radius:50%;background:#ddd;display:flex;align-items:center;justify-content:center;font-size:40px;color:#888">👤</div>';
+    }
+}
 function init(){
     const params=new URLSearchParams(window.location.search);
     const id=params.get('id');
@@ -48,43 +56,45 @@ function init(){
 async function loadArtistDetail(id){
     currentArtistDetailId=id;
     try{
-        const r=await fetch(API_BASE+'/api/artists/'+id).then(x=>x.json());
-        if(r.error){alert(r.error);return;}
+        const r=await apiGet('/api/artists/'+id);
         document.getElementById('artistDetailId').value=r.id||'';
         document.getElementById('artistDetailName').value=r.name||'';
         document.getElementById('artistDetailBio').value=r.bio||'';
-        const avatarPreview=document.getElementById('artistDetailAvatarPreview');
-        if(r.avatar){avatarPreview.innerHTML='<img src="'+r.avatar+'" style="width:100px;height:100px;border-radius:50%;object-fit:cover">';}
-        else{avatarPreview.innerHTML='<div style="width:100px;height:100px;border-radius:50%;background:#ddd;display:flex;align-items:center;justify-content:center;font-size:40px;color:#888">👤</div>';}
-    }catch(e){alert(e.message);}
+        renderArtistAvatar(r.avatar);
+    }catch(e){
+        alert(e.message);
+    }
 }
 async function saveArtistDetail(){
     const name=document.getElementById('artistDetailName').value;
     if(!name){alert('请输入名字');return;}
     const bio=document.getElementById('artistDetailBio').value;
     const avatarFile=document.getElementById('artistDetailAvatarFile').files[0];
-    if(avatarFile){
-        const formData=new FormData();
-        formData.append('name',name);
-        formData.append('bio',bio);
-        formData.append('avatar',avatarFile);
-        try{
-            const r=await fetch(API_BASE+'/api/artists/'+currentArtistDetailId,{method:'PUT',body:formData}).then(x=>x.json());
-            if(r.ok){alert('保存成功');window.location.href='/artists';}else{alert(r.error||'保存失败');}
-        }catch(e){alert(e.message);}
-    }else{
-        try{
-            const r=await fetch(API_BASE+'/api/artists/'+currentArtistDetailId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,bio})}).then(x=>x.json());
-            if(r.ok){alert('保存成功');window.location.href='/artists';}else{alert(r.error||'保存失败');}
-        }catch(e){alert(e.message);}
+    try{
+        if(avatarFile){
+            const formData=new FormData();
+            formData.append('name',name);
+            formData.append('bio',bio);
+            formData.append('avatar',avatarFile);
+            await apiPutForm('/api/artists/'+currentArtistDetailId,formData);
+        }else{
+            await apiPut('/api/artists/'+currentArtistDetailId,{name,bio});
+        }
+        alert('保存成功');
+        window.location.href='/artists';
+    }catch(e){
+        alert(e.message||'保存失败');
     }
 }
 async function deleteArtistDetail(){
     if(!confirm('确定删除这个歌手？'))return;
     try{
-        const r=await fetch(API_BASE+'/api/artists/'+currentArtistDetailId,{method:'DELETE'}).then(x=>x.json());
-        if(r.ok){alert('删除成功');window.location.href='/artists';}else{alert(r.error||'删除失败');}
-    }catch(e){alert(e.message);}
+        await apiDelete('/api/artists/'+currentArtistDetailId);
+        alert('删除成功');
+        window.location.href='/artists';
+    }catch(e){
+        alert(e.message||'删除失败');
+    }
 }
 init();
 </script>

@@ -3,7 +3,18 @@
 处理歌手相关的 API 请求
 """
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint
+
+from pojo.dto import use_dto
+from pojo.dto.artists_dto import (
+    AddArtistDTO,
+    ArtistIdPathDTO,
+    AvatarUploadDTO,
+    ListArtistsQueryDTO,
+    UpdateArtistDTO,
+)
+from pojo.vo import PageVO, Result
+from pojo.vo.artists_vo import ArtistVO
 from services.artists_service import ArtistsService
 
 artists_controller = Blueprint('artists', __name__, url_prefix='/api/artists')
@@ -16,13 +27,17 @@ def _save_avatar_to_oss(avatar_file):
     """
     将头像文件上传到 OSS，返回公网 URL
     """
+    from pojo.vo.exceptions import BadRequestException
     from utils.aliyun_oss import upload_file
 
     ext = avatar_file.filename.rsplit('.', 1)[-1].lower() if '.' in avatar_file.filename else ''
     if ext not in ALLOWED_AVATAR_EXTS:
-        raise ValueError(f'不支持的图片格式: {ext}')
+        raise BadRequestException(f'不支持的图片格式: {ext}')
 
-    avatar_url = upload_file(avatar_file)
+    try:
+        avatar_url = upload_file(avatar_file)
+    except Exception as exc:
+        raise RuntimeError(f'OSS upload failed: {exc}') from exc
     return avatar_url
 
 
@@ -31,120 +46,65 @@ def _save_avatar_to_oss(avatar_file):
 # ============================================================================
 
 @artists_controller.route('/list', methods=['GET'])
-def list_artists():
+@use_dto(ListArtistsQueryDTO, source='query')
+def list_artists(dto: ListArtistsQueryDTO):
     """获取歌手列表"""
-    limit = request.args.get('limit', 20, type=int)
-    offset = request.args.get('offset', 0, type=int)
+    artists, total = ArtistsService.get_artists(dto.limit, dto.offset)
+    artist_vos = [ArtistVO.from_domain(artist) for artist in artists]
+    return Result.success(
+        PageVO(items=artist_vos, total=total, limit=dto.limit, offset=dto.offset)
+    ).to_response()
 
-    artists, total = ArtistsService.get_artists(limit, offset)
 
-    return jsonify({
-        'artists': artists,
-        'total': total
-    })
+@artists_controller.route('/count', methods=['GET'])
+def get_artists_count():
+    count = ArtistsService.count_artists()
+    return Result.success({'total': count}).to_response()
 
 
 @artists_controller.route('/<int:artist_id>', methods=['GET'])
-def get_artist(artist_id):
+@use_dto(ArtistIdPathDTO, source='path')
+def get_artist(dto: ArtistIdPathDTO):
     """获取单个歌手"""
-    artist = ArtistsService.get_artist_by_id(artist_id)
-    if artist:
-        return jsonify(artist)
-    return jsonify({'error': 'Artist not found'}), 404
+    artist = ArtistsService.get_artist_by_id(dto.artist_id)
+    return Result.success(ArtistVO.from_domain(artist)).to_response()
 
 
 @artists_controller.route('/add', methods=['POST'])
-def add_artist():
-    """添加歌手（支持文件上传）"""
-    # 支持 JSON 或 multipart/form-data
-    if request.content_type and 'multipart/form-data' in request.content_type:
-        name = request.form.get('name')
-        bio = request.form.get('bio')
-        avatar_file = request.files.get('avatar')
-        avatar_url = None
+@use_dto(AddArtistDTO)
+def add_artist(dto: AddArtistDTO):
+    """添加歌手（兼容 JSON / multipart）"""
+    avatar_url = None
+    if dto.avatar is not None and getattr(dto.avatar, 'filename', ''):
+        avatar_url = _save_avatar_to_oss(dto.avatar)
 
-        # 处理头像上传 -> OSS
-        if avatar_file and avatar_file.filename:
-            try:
-                avatar_url = _save_avatar_to_oss(avatar_file)
-            except ValueError as e:
-                return jsonify({'error': str(e)}), 400
-            except Exception as e:
-                return jsonify({'error': f'OSS upload failed: {e}'}), 500
-
-        if not name:
-            return jsonify({'error': 'name is required'}), 400
-
-        try:
-            artist_id = ArtistsService.add_artist({
-                'name': name,
-                'bio': bio,
-                'avatar': avatar_url
-            })
-        except ValueError as e:
-            return jsonify({'error': str(e)}), 409
-        if artist_id:
-            return jsonify({'ok': True, 'artist_id': artist_id})
-        return jsonify({'error': 'Failed to add artist'}), 500
-    else:
-        data = request.get_json() or {}
-        try:
-            artist_id = ArtistsService.add_artist(data)
-        except ValueError as e:
-            return jsonify({'error': str(e)}), 409
-        if artist_id:
-            return jsonify({'ok': True, 'artist_id': artist_id})
-        return jsonify({'error': 'Failed to add artist'}), 500
+    artist_id = ArtistsService.add_artist({
+        'name': dto.name,
+        'bio': dto.bio,
+        'avatar': avatar_url,
+    })
+    artist = ArtistsService.get_artist_by_id(artist_id)
+    return Result.success(ArtistVO.from_domain(artist)).to_response()
 
 
 @artists_controller.route('/<int:artist_id>', methods=['PUT'])
-def update_artist(artist_id):
-    """更新歌手（支持文件上传）"""
-    if request.content_type and 'multipart/form-data' in request.content_type:
-        name = request.form.get('name')
-        bio = request.form.get('bio')
-        avatar_file = request.files.get('avatar')
-
-        data = {}
-        if name:
-            data['name'] = name
-        if bio:
-            data['bio'] = bio
-
-        # 头像上传 -> OSS
-        if avatar_file and avatar_file.filename:
-            try:
-                data['avatar'] = _save_avatar_to_oss(avatar_file)
-            except ValueError as e:
-                return jsonify({'error': str(e)}), 400
-            except Exception as e:
-                return jsonify({'error': f'OSS upload failed: {e}'}), 500
-
-        try:
-            if data and ArtistsService.update_artist(artist_id, data):
-                return jsonify({'ok': True, 'message': 'Artist updated'})
-        except ValueError as e:
-            return jsonify({'error': str(e)}), 409
-        return jsonify({'error': 'Failed to update artist'}), 500
-    else:
-        data = request.get_json() or {}
-        try:
-            if ArtistsService.update_artist(artist_id, data):
-                return jsonify({'ok': True, 'message': 'Artist updated'})
-        except ValueError as e:
-            return jsonify({'error': str(e)}), 409
-        return jsonify({'error': 'Failed to update artist'}), 500
+@use_dto(ArtistIdPathDTO, source='path', arg_name='path_dto')
+@use_dto(UpdateArtistDTO)
+def update_artist(path_dto: ArtistIdPathDTO, dto: UpdateArtistDTO):
+    """更新歌手文本信息"""
+    artist = ArtistsService.update_artist(path_dto.artist_id, {
+        'name': dto.name,
+        'bio': dto.bio,
+    })
+    return Result.success(ArtistVO.from_domain(artist)).to_response()
 
 
 @artists_controller.route('/<int:artist_id>', methods=['DELETE'])
-def delete_artist(artist_id):
+@use_dto(ArtistIdPathDTO, source='path')
+def delete_artist(dto: ArtistIdPathDTO):
     """删除歌手"""
-    try:
-        if ArtistsService.delete_artist(artist_id):
-            return jsonify({'ok': True, 'message': 'Artist deleted'})
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 409
-    return jsonify({'error': 'Failed to delete artist'}), 500
+    ArtistsService.delete_artist(dto.artist_id)
+    return Result.success({'ok': True, 'message': 'Artist deleted'}).to_response()
 
 
 # ============================================================================
@@ -152,20 +112,10 @@ def delete_artist(artist_id):
 # ============================================================================
 
 @artists_controller.route('/<int:artist_id>/avatar', methods=['PUT'])
-def update_artist_avatar(artist_id):
+@use_dto(ArtistIdPathDTO, source='path', arg_name='path_dto')
+@use_dto(AvatarUploadDTO)
+def update_artist_avatar(path_dto: ArtistIdPathDTO, dto: AvatarUploadDTO):
     """更新歌手头像（multipart/form-data，上传到 OSS）"""
-    avatar_file = request.files.get('avatar')
-
-    if not avatar_file or not avatar_file.filename:
-        return jsonify({'error': 'avatar file is required'}), 400
-
-    try:
-        avatar_url = _save_avatar_to_oss(avatar_file)
-    except ValueError as e:
-        return jsonify({'error': str(e)}), 400
-    except Exception as e:
-        return jsonify({'error': f'OSS upload failed: {e}'}), 500
-
-    if ArtistsService.update_artist(artist_id, {'avatar': avatar_url}):
-        return jsonify({'ok': True, 'avatar': avatar_url})
-    return jsonify({'error': 'Failed to update avatar'}), 500
+    avatar_url = _save_avatar_to_oss(dto.avatar)
+    ArtistsService.update_artist(path_dto.artist_id, {'avatar': avatar_url})
+    return Result.success({'ok': True, 'avatar_url': avatar_url}).to_response()

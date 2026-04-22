@@ -3,7 +3,7 @@
 主应用入口
 """
 
-from flask import Flask, request, jsonify, send_file
+from flask import Flask
 from flask_cors import CORS
 from pathlib import Path
 import os
@@ -27,8 +27,6 @@ from controllers import (
     artists_controller,
     audio_sources_controller,
     transcribe_controller,
-    sources_controller,
-    music_controller,
     files_controller,
 )
 
@@ -74,8 +72,6 @@ app.register_blueprint(songs_controller)
 app.register_blueprint(capture_controller)
 app.register_blueprint(health_controller)
 app.register_blueprint(artists_controller)
-app.register_blueprint(sources_controller)
-app.register_blueprint(music_controller)
 app.register_blueprint(files_controller)
 
 # ============================================================================

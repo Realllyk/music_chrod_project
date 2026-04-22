@@ -107,6 +107,10 @@ class SongsService:
         return SongsMapper.find_all(limit, offset)
 
     @staticmethod
+    def count_songs():
+        return SongsMapper.count()
+
+    @staticmethod
     def get_song_by_id(song_id):
         return SongsMapper.find_by_id(song_id)
 

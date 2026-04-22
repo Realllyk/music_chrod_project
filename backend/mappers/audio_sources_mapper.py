@@ -43,6 +43,24 @@ class AudioSourcesMapper:
             return None
     
     @staticmethod
+    def count():
+        """统计音源数量"""
+        conn = get_db()
+        if not conn:
+            return 0
+
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT COUNT(*) as cnt FROM audio_sources")
+                total_row = cursor.fetchone()
+                return total_row['cnt'] if isinstance(total_row, dict) else total_row[0]
+        except Exception as e:
+            print(f"统计音源数量失败: {e}")
+            return 0
+        finally:
+            conn.close()
+
+    @staticmethod
     def find_all(limit=100, offset=0):
         """查询所有音源（不按状态过滤）"""
         conn = get_db()

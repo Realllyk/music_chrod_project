@@ -34,6 +34,23 @@ class ArtistsMapper:
             return None
     
     @staticmethod
+    def count():
+        """统计歌手数量（仅未删除）"""
+        conn = get_db()
+        if not conn:
+            return 0
+
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT COUNT(*) as cnt FROM artists WHERE deleted_at IS NULL")
+                return cursor.fetchone()['cnt']
+        except Exception as e:
+            print(f"统计歌手数量失败: {e}")
+            return 0
+        finally:
+            conn.close()
+
+    @staticmethod
     def find_all(limit=100, offset=0):
         """查询所有歌手"""
         conn = get_db()

@@ -2,6 +2,8 @@
 
 from .result import Result, PageVO
 from .base import BaseVO
+from .artists_vo import ArtistVO
+from .audio_sources_vo import AudioSourceVO
 from .capture_vo import (
     ActiveCaptureSessionVO,
     CaptureSessionVO,
@@ -20,6 +22,8 @@ __all__ = [
     'Result',
     'PageVO',
     'BaseVO',
+    'ArtistVO',
+    'AudioSourceVO',
     'CaptureSessionVO',
     'ActiveCaptureSessionVO',
     'StartSessionVO',
