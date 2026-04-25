@@ -1,31 +1,16 @@
-"""
-旋律提取器模块
-"""
+"""旋律/和弦提取器模块导出。"""
 
-from transcriber.base import (
-    TranscriberBase,
-    MelodyTranscriberBase,
-    ChordTranscriberBase,
-    AnalysisType
-)
-from transcriber.librosa.melody import LibrosaMelodyTranscriber
-from transcriber.librosa.chord import LibrosaChordTranscriber
-from transcriber.spleeter.melody import SpleeterMelodyTranscriber
-from transcriber.spleeter.chord import SpleeterChordTranscriber
-from transcriber.demucs.melody import DemucsMelodyTranscriber
-from transcriber.demucs.chord import DemucsChordTranscriber
+from transcriber.base import AnalysisType, ChordTranscriberBase, MelodyTranscriberBase, TranscriberBase
 from transcriber.basic_pitch.melody import BasicPitchMelodyTranscriber
+from transcriber.librosa.chord import LibrosaChordTranscriber
+from transcriber.librosa.melody import LibrosaMelodyTranscriber
 
 __all__ = [
     'TranscriberBase',
-    'MelodyTranscriberBase', 
+    'MelodyTranscriberBase',
     'ChordTranscriberBase',
     'AnalysisType',
     'LibrosaMelodyTranscriber',
     'LibrosaChordTranscriber',
-    'SpleeterMelodyTranscriber',
-    'SpleeterChordTranscriber',
-    'DemucsMelodyTranscriber',
-    'DemucsChordTranscriber',
     'BasicPitchMelodyTranscriber',
 ]

@@ -7,10 +7,12 @@ from .songs_mapper import SongsMapper
 from .capture_mapper import CaptureSessionsMapper
 from .artists_mapper import ArtistsMapper
 from .song_analysis_mapper import SongAnalysisMapper
+from .transcribe_tasks_mapper import TranscribeTasksMapper
 
 __all__ = [
     'SongsMapper', 
     'CaptureSessionsMapper',
     'ArtistsMapper',
-    'SongAnalysisMapper'
+    'SongAnalysisMapper',
+    'TranscribeTasksMapper'
 ]

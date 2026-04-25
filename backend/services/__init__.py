@@ -6,5 +6,6 @@ Services 包
 from .songs_service import SongsService
 from .capture_service import CaptureService
 from .artists_service import ArtistsService
+from .transcribe_service import TranscribeService
 
-__all__ = ['SongsService', 'CaptureService', 'ArtistsService']
+__all__ = ['SongsService', 'CaptureService', 'ArtistsService', 'TranscribeService']
